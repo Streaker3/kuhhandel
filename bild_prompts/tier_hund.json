@@ -1,30 +1,62 @@
 {
-  "task": "Create ONE single playing card as a finished front-facing card image (not a photo of a card, no table, no hands).",
+  "task": "Create one single playing card as a finished, front-facing card illustration, not a photograph of a card.",
   "style": {
-    "medium": "hand-drawn cartoon illustration by a professional comic and children's-book illustrator, confident black ink linework with fine hatching, soft watercolor and colored-pencil shading",
-    "character_design": "humorous, slightly exaggerated caricature, big expressive eyes, cheeky grin or funny expression, warm and charming, never childish or crude",
-    "palette": "warm natural earth tones, muted pastels, gentle highlights, no neon colors",
-    "background": "mostly clean off-white / cream card background; only a small, light themed vignette around or under the subject (a patch of ground or a few props), no full-color background fill",
-    "card_frame": "trading-card layout, portrait 2:3, rounded corners, thin white outer border, inner area with soft paper texture",
-    "number_style": "hand-lettered bold chunky numerals, warm golden-yellow fill with thick dark-brown outline and slight drop shadow, like a classic 1990s German family card game",
-    "composition": "subject large and centered, slightly overlapping the vignette, top-left corner kept free for the number",
-    "consistency": "all cards of this set share exactly the same line weight, shading technique, frame, number font and paper texture"
+    "medium": "Hand-drawn cartoon illustration by a professional comic and children's-book illustrator; confident dark-brown ink linework, expressive sketch hatching, soft watercolor washes, and simple colored-pencil shading.",
+    "character_design": "Humorous, charming, slightly exaggerated caricature with large expressive eyes and a mischievous grin; warm and friendly, never crude.",
+    "palette": "Warm natural earth tones, muted pastels, cream, warm gray, taupe, and golden yellow; gentle highlights; no neon colors.",
+    "background": "Mostly clean off-white/cream paper with subtle paper grain. Only a small, light ground vignette beneath the subject, as described in card.themed_vignette. No full-color background fill.",
+    "card_frame": "Portrait 2:3 trading-card layout with rounded corners, thin white outer border, dark-brown rounded inner outline, and softly textured cream paper.",
+    "number_style": "Hand-lettered bold chunky numerals, golden-yellow fill, thick dark-brown outline, and slight hand-drawn shadow, reminiscent of a classic 1990s German family card game.",
+    "linework": "Loose but confident dark-brown/near-black ink outlines, varied hand-drawn strokes, fine hatching and crosshatching for fur and shadows.",
+    "shading": "Soft watercolor texture with colored-pencil accents and small cream highlights; avoid glossy, photorealistic, or 3D rendering.",
+    "consistency": "Use the same frame, paper texture, outline weight, shading technique, and numeral treatment across the card set."
   },
   "card": {
-    "subject": "a loyal brown-and-white farm dog sitting upright, tongue out, one ear flopped, tail wagging with motion lines",
-    "themed_vignette": "a bone lying next to it and the corner of a wooden dog house",
+    "subject": "A loyal brown-and-white farm dog (collie type) with an oversized head, one ear up and one flopped, big shiny eyes, and a happy open mouth with tongue out.",
+    "accessories": "A worn red collar with a small round brass tag (no text on it).",
+    "pose": "Full-body dog sitting upright with its tail wagging, shown with small motion lines, centered and facing slightly toward the viewer. Keep the entire dog visible and uncropped.",
+    "themed_vignette": "A light ground patch beneath the dog with a bone lying next to it and the corner of a small wooden dog house at one side.",
     "number": {
       "text": "160",
-      "positions": [
-        "top-left"
-      ],
-      "note": "the ONLY text on the card"
-    }
+      "position": "top-left",
+      "style": "Large golden-yellow chunky numerals with thick dark-brown outline and slight hand-drawn drop shadow"
+    },
+    "text_rule": "The number 160 is the only text on the card. No other words, letters, labels, logos, or symbols that resemble text."
+  },
+  "composition": {
+    "orientation": "portrait",
+    "aspect_ratio": "2:3",
+    "subject_scale": "large and centered, filling most of the inner card area",
+    "number_clearance": "Keep the upper-left corner clear enough for the number 160; do not overlap the numerals with the subject.",
+    "framing": "Show the full card front-on, with no perspective tilt, tabletop, hands, or surrounding scene."
   },
   "output": {
-    "aspect_ratio": "2:3",
     "resolution": "1024x1536",
-    "background_outside_card": "transparent or plain white"
+    "background_outside_card": "transparent or plain white",
+    "format": "PNG"
   },
-  "negative_prompt": "photorealism, 3D render, glossy CGI, flat vector, anime, pixel art, text other than the specified number, animal names, words, letters, logos, watermark, signature, full saturated background color, busy scenery, cropped subject"
+  "negative_prompt": [
+    "photograph of a card",
+    "table",
+    "hands",
+    "perspective tilt",
+    "photorealism",
+    "3D render",
+    "glossy CGI",
+    "flat vector art",
+    "anime",
+    "pixel art",
+    "overly detailed scenery",
+    "full saturated background",
+    "neon colors",
+    "cropped dog",
+    "cropped tail",
+    "extra limbs",
+    "text other than 160",
+    "animal names",
+    "letters",
+    "logos",
+    "watermark",
+    "signature"
+  ]
 }
