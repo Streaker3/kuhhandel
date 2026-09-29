@@ -105,7 +105,9 @@ class Game:
         self.trade = None
         self.trades_done = 0
         self.events = []  # {"pub": text|None, "priv": {spieler: text}, "kind": ..., ...}
-        self.revealed_cash = [None] * num_players  # öffentlich bekanntes Bargeld
+        self.revealed_cash = [None] * num_players  # nach Zahlungsunfähigkeit offengelegtes Bargeld
+        # known[v][p]: Bargeld von p, wie es v durch Mitrechnen öffentlicher Zahlungen kennt (None = unbekannt)
+        self.known = [[notes_value(START_NOTES)] * num_players for _ in range(num_players)]
         self.to_act = None
         self._advance()
 
@@ -117,12 +119,21 @@ class Game:
         self.events.append({"pub": pub, "priv": priv or {}, **data})
 
     def _transfer_notes(self, src: int, dst: int, notes):
+        """Öffentliche Zahlung (Versteigerung): alle können mitrechnen."""
         for i, c in enumerate(notes):
             self.cash[src][i] -= c
             self.cash[dst][i] += c
-        # verdeckter/teilweise verdeckter Geldfluss -> Kenntnis veraltet
+        v = notes_value(notes)
+        for row in self.known:
+            if row[src] is not None:
+                row[src] -= v
+            if row[dst] is not None:
+                row[dst] += v
         self.revealed_cash[src] = None
         self.revealed_cash[dst] = None
+
+    def known_cash(self, viewer: int, p: int):
+        return self.cash_value(p) if viewer == p else self.known[viewer][p]
 
     def _pay(self, src: int, dst: int, amount: int):
         notes = compose_payment(self.cash[src], amount)
@@ -208,6 +219,9 @@ class Game:
                             if self.bank[idx] > 0:
                                 self.bank[idx] -= 1
                                 self.cash[p][idx] += 1
+                                for row in self.known:
+                                    if row[p] is not None:
+                                        row[p] += DENOMS[idx]
                                 if self.revealed_cash[p] is not None:
                                     self.revealed_cash[p] = list(self.cash[p])
                         self._log(f"{self.donkeys_drawn}. Esel! Jeder bekommt {DENOMS[idx]} von der Bank.",
@@ -342,6 +356,8 @@ class Game:
             return
         # Zahlungsunfähig: Geld offenlegen, Ausschluss (akkumulierend), Wiederholung
         self.revealed_cash[h] = list(self.cash[h])
+        for row in self.known:
+            row[h] = self.cash_value(h)
         self._log(
             f"{self.names[h]} kann {amt} nicht zahlen! Bargeld offengelegt: {self.cash_value(h)}. "
             f"Versteigerung wird ohne {self.names[h]} wiederholt.",
@@ -373,7 +389,8 @@ class Game:
             raise IllegalAction("Diese Herausforderung ist nicht möglich")
         k = 2 if self.animals[p][animal] >= 2 and self.animals[target][animal] >= 2 else 1
         self.trade = {"challenger": p, "target": target, "animal": animal, "k": k,
-                      "stage": "offer", "offer": None, "counter": None}
+                      "stage": "offer", "offer": None, "counter": None,
+                      "cash_before": (self.cash_value(p), self.cash_value(target))}
         msg = f"{self.names[p]} fordert {self.names[target]} heraus: {k}× {NAMES[animal]}."
         self._log(None, {p: msg, target: msg}, kind="challenge")
 
@@ -403,8 +420,22 @@ class Game:
                f"von {self.names[loser]}.")
         self._log(pub, priv_msgs, kind="trade_result", winner=winner, loser=loser,
                   animal=t["animal"], k=t["k"])
-        self.revealed_cash[t["challenger"]] = None
-        self.revealed_cash[t["target"]] = None
+        c, g = t["challenger"], t["target"]
+        self.revealed_cash[c] = None
+        self.revealed_cash[g] = None
+        # Beteiligte kennen den Geldfluss, Unbeteiligte verlieren den Überblick
+        dc = self.cash_value(c) - t["cash_before"][0]
+        dg = self.cash_value(g) - t["cash_before"][1]
+        for v in range(self.n):
+            if v == c:
+                if self.known[v][g] is not None:
+                    self.known[v][g] += dg
+            elif v == g:
+                if self.known[v][c] is not None:
+                    self.known[v][c] += dc
+            else:
+                self.known[v][c] = None
+                self.known[v][g] = None
         self.trade = None
         self.trades_done += 1
         self.turn = (t["challenger"] + 1) % self.n

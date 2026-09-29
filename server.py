@@ -12,6 +12,25 @@ from kuhhandel.bots import HeuristicBot
 from kuhhandel.engine import Game, IllegalAction
 from kuhhandel.view import player_view
 
+ROOT = Path(__file__).parent
+AI_CKPTS = [ROOT / "checkpoints" / "best.pt", ROOT / "checkpoints" / "latest.pt"]
+
+
+def ai_checkpoint():
+    return next((p for p in AI_CKPTS if p.exists()), None)
+
+
+def make_ai_bot():
+    """Trainierte KI, falls PyTorch und ein Checkpoint vorhanden sind."""
+    ck = ai_checkpoint()
+    if ck is None:
+        return None
+    try:
+        from kuhhandel.model import NNBot
+    except ImportError:
+        return None
+    return NNBot(ck)
+
 WEB = Path(__file__).parent / "web"
 BOT_NAMES = ["Berta", "Konrad", "Hilde", "Gustav"]
 HUMAN = 0
@@ -20,11 +39,15 @@ lock = threading.Lock()
 state = {"game": None, "bots": {}}
 
 
-def new_game(players: int, name: str, seed=None):
+def new_game(players: int, name: str, opponents: str = "ai", seed=None):
     names = [name or "Du"] + BOT_NAMES[: players - 1]
     g = Game(players, seed=seed, names=names)
     state["game"] = g
-    state["bots"] = {p: HeuristicBot(seed=None) for p in range(1, players)}
+    bots = {}
+    for p in range(1, players):
+        bot = make_ai_bot() if opponents == "ai" else None
+        bots[p] = bot or HeuristicBot(seed=None)
+    state["bots"] = bots
 
 
 def parse_action(a):
@@ -64,6 +87,10 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_GET(self):
         path = self.path.split("?")[0]
+        if path == "/api/info":
+            ck = ai_checkpoint()
+            return self._json({"ai_available": make_ai_bot() is not None,
+                               "checkpoint": ck.name if ck else None})
         if path == "/api/state":
             q = self.path.split("since=")
             since = int(q[1]) if len(q) > 1 else 0
@@ -91,7 +118,7 @@ class Handler(BaseHTTPRequestHandler):
         with lock:
             try:
                 if path == "/api/new":
-                    new_game(int(body.get("players", 4)), body.get("name", "Du"))
+                    new_game(int(body.get("players", 4)), body.get("name", "Du"), body.get("opponents", "ai"))
                     return self._json(self._view(0))
                 g = state["game"]
                 if g is None:

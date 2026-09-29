@@ -2,12 +2,30 @@
 
 Engine, Oberfläche und (bald) trainierbare KI für eine Hausregel-Variante von „Kuhhandel“.
 
+## Einrichtung (einmalig)
+
+```bash
+uv venv --python 3.12 .venv && uv pip install --python .venv/bin/python torch numpy
+```
+
 ## Spielen
 
 ```bash
-python3 server.py
+.venv/bin/python server.py
 ```
 Dann http://localhost:8765 öffnen. `?fast` in der URL lässt die Bots ohne Pause spielen (zum Testen).
+
+## KI trainieren
+
+```bash
+.venv/bin/python train.py --hours 8          # neues Training, stoppt nach 8 Stunden
+.venv/bin/python train.py --resume --hours 8 # weitertrainieren
+.venv/bin/python evaluate.py                 # Siegquote gegen die Heuristik-Bots
+```
+
+- Checkpoints landen in `checkpoints/`. `best.pt` ist die bisher stärkste Version gegen die Heuristik, und die Oberfläche nimmt sie automatisch als Gegner.
+- Der Verlauf steht in `runs/log.csv`. Die Spalte `eval_winrate` ist die Siegquote gegen die Heuristik-Bots. Zum Vergleich: Bei 3 bis 5 Spielern läge Zufall bei etwa 26 %.
+- Das Verfahren ist PPO mit Self-Play. Belohnung gibt es nur für den Sieg (+1). Gegner sind die aktuelle Version, ältere Versionen (die Liga) und die Heuristik-Bots.
 
 ## Tests
 
@@ -20,6 +38,9 @@ python3 -m unittest -v tests.test_engine
 - `kuhhandel/engine.py` – Regel-Engine (Zustandsmaschine, Aktionen als Tupel)
 - `kuhhandel/view.py` – Spielansicht pro Spieler (nur erlaubte Informationen)
 - `kuhhandel/bots.py` – Zufalls- und Heuristik-Bots
+- `kuhhandel/encode.py` – Beobachtungsvektor, Aktionsraum (103 Aktionen) und Maske der erlaubten Aktionen
+- `kuhhandel/model.py` – Policy-/Value-Netz und `NNBot`
+- `train.py` / `evaluate.py` – Training und Auswertung
 - `server.py` – lokaler HTTP-Server (nur Standardbibliothek)
 - `web/` – Oberfläche; eigene Bilder unter `web/assets/` (siehe `BILD_PROMPTS.md`)
 

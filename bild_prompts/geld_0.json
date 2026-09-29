@@ -12,10 +12,10 @@
     "consistency": "Use the same frame, paper texture, outline weight, shading technique, and numeral treatment across the card set."
   },
   "card": {
-    "subject": "An empty old brown leather coin purse lying open and turned upside down, with a single small moth fluttering out of it and a few specks of dust.",
-    "accessories": "None.",
-    "pose": "Centered object, shown slightly from the front, entirely visible and uncropped.",
-    "themed_vignette": "No vignette beyond a soft small shadow; plain cream paper.",
+    "subject": "A comic middle-aged man shown from the chest up, peeking through a large oval golden ring frame shaped like a big numeral zero that surrounds his face. He looks utterly baffled and dumbfounded: eyes wide open with small pupils, raised eyebrows, mouth corners turned down in a puzzled, slightly sulky frown. He is almost bald except for one single long hair sticking straight up from the top of his head that makes one small loop (a curl) in the middle before ending in a point. Round red nose, slightly flushed cheeks, simple farmer's shirt with suspenders.",
+    "accessories": "None; his hands grip the edges of the oval zero frame from behind.",
+    "pose": "Centered, facing the viewer, head and shoulders visible inside and slightly overlapping the oval zero frame. Keep the entire frame and the hair loop visible and uncropped.",
+    "themed_vignette": "No ground vignette; plain cream paper with a soft shadow behind the oval frame.",
     "number": {
       "text": "0",
       "position": "top-left and bottom-right (bottom-right copy rotated 180°)",
@@ -50,14 +50,17 @@
     "overly detailed scenery",
     "full saturated background",
     "neon colors",
-    "cropped object",
     "animals",
-    "people",
     "text other than 0",
     "animal names",
     "letters",
     "logos",
     "watermark",
-    "signature"
+    "signature",
+    "cropped head",
+    "cropped hair loop",
+    "more than one hair",
+    "happy smile",
+    "extra fingers"
   ]
 }

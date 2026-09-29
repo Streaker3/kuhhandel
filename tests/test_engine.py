@@ -184,6 +184,15 @@ class TestTrade(unittest.TestCase):
         self.assertEqual(g.animals[0][1], 4)
         self.assertEqual(g.cash[0], [2, 4, 1, 0, 0, 0])
 
+    def test_known_cash(self):
+        g = self.g
+        g.step(("challenge", 1, 1))
+        g.step(("offer", (0, 2, 0, 0, 0, 0)))
+        g.step(("counter", (0, 0, 1, 0, 0, 0)))
+        self.assertEqual(g.known_cash(0, 1), 60)
+        self.assertEqual(g.known_cash(1, 0), 120)
+        self.assertIsNone(g.known_cash(2, 0))
+
     def test_uninvolved_sees_no_amount(self):
         g = self.g
         g.step(("challenge", 1, 1))
@@ -204,6 +213,11 @@ class TestFullGames(unittest.TestCase):
             g = play_game(bots, seed=seed)
             self.assertEqual(g.phase, "over")
             self.assertEqual(total_money(g), 4700)
+            for v in range(n):
+                for p in range(n):
+                    k = g.known_cash(v, p)
+                    if k is not None:
+                        self.assertEqual(k, g.cash_value(p))
             self.assertTrue(all(sum(g.animals[p][a] for p in range(n)) == 4 for a in range(10)))
 
 

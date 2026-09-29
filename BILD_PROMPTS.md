@@ -16,6 +16,7 @@ fügst du als Prompt in dein Bild-Tool ein. Der `style`-Block ist in allen Karte
 | `tier_<tier>.json` | `web/assets/cards/<tier>.png` |
 | `geld_<wert>.json` | `web/assets/money/<wert>.png` |
 | `rueckseite.json` | `web/assets/card_back.png` |
+| `rueckseite_geld.json` | `web/assets/money_back.png` |
 | `tisch.json` | `web/assets/table.png` |
 
 ## Stil

@@ -43,6 +43,7 @@ async function loadAssets() {
     moneyImg[d] = await probe(`assets/money/${d}.png`);
   }));
   if (await probe("assets/card_back.png")) document.body.classList.add("img-back");
+  if (await probe("assets/money_back.png")) document.body.classList.add("img-mback");
   if (await probe("assets/table.png")) $("#felt").classList.add("img");
 }
 
@@ -448,11 +449,25 @@ document.querySelectorAll("#in-players button").forEach((b) => (b.onclick = () =
   b.classList.add("on");
   nPlayers = +b.dataset.n;
 }));
+let opponents = "ai";
+document.querySelectorAll("#in-opp button").forEach((b) => (b.onclick = () => {
+  document.querySelectorAll("#in-opp button").forEach((x) => x.classList.remove("on"));
+  b.classList.add("on");
+  opponents = b.dataset.o;
+}));
+fetch("/api/info").then((r) => r.json()).then((info) => {
+  if (!info.ai_available) {
+    $("#ai-note").textContent = "Noch keine trainierte KI gefunden – es spielen die einfachen Bots.";
+    document.querySelector('#in-opp [data-o="heuristic"]').click();
+  } else {
+    $("#ai-note").textContent = `KI-Stand: ${info.checkpoint}`;
+  }
+});
 $("#btn-start").onclick = async () => {
   since = 0;
   $("#log-list").innerHTML = "";
   $("#overlay").classList.remove("show");
-  accept(await api("/api/new", { players: nPlayers, name: $("#in-name").value.trim() || "Du" }));
+  accept(await api("/api/new", { players: nPlayers, name: $("#in-name").value.trim() || "Du", opponents }));
 };
 $("#log-toggle").onclick = () => $("#log").classList.toggle("open");
 

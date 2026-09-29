@@ -1,0 +1,46 @@
+{
+  "task": "Create the back side of one MONEY card from the same set (same frame, same design as the animal card back, but green), as a finished front-facing card illustration, not a photograph of a card.",
+  "style": {
+    "medium": "Hand-drawn cartoon illustration by a professional comic and children's-book illustrator; confident dark-brown ink linework, expressive sketch hatching, soft watercolor washes, and simple colored-pencil shading.",
+    "character_design": "Humorous, charming, slightly exaggerated caricature with large expressive eyes and a mischievous grin; warm and friendly, never crude.",
+    "palette": "Warm natural earth tones, muted pastels, cream, warm gray, taupe, and golden yellow; gentle highlights; no neon colors.",
+    "background": "Deep meadow-green field with a fine cream diamond lattice pattern, drawn by hand with watercolor texture.",
+    "card_frame": "Portrait 2:3 trading-card layout with rounded corners, thin white outer border, dark-brown rounded inner outline, and softly textured cream paper.",
+    "number_style": "Hand-lettered bold chunky numerals, golden-yellow fill, thick dark-brown outline, and slight hand-drawn shadow, reminiscent of a classic 1990s German family card game.",
+    "linework": "Loose but confident dark-brown/near-black ink outlines, varied hand-drawn strokes, fine hatching and crosshatching for fur and shadows.",
+    "shading": "Soft watercolor texture with colored-pencil accents and small cream highlights; avoid glossy, photorealistic, or 3D rendering.",
+    "consistency": "Use the same frame, paper texture, outline weight, shading technique, and numeral treatment across the card set."
+  },
+  "card": {
+    "design": "Identical layout to the animal card back: symmetrical ornamental card back with a central round cream medallion showing a cartoon cow head wearing a tiny auctioneer's hat and holding a wooden gavel, framed by a wreath of wheat ears. Only the field color is green instead of red; thin golden inner frame line.",
+    "text_rule": "No text, numbers, letters, or logos."
+  },
+  "composition": {
+    "orientation": "portrait",
+    "aspect_ratio": "2:3",
+    "framing": "Show the full card front-on, with no perspective tilt, tabletop, hands, or surrounding scene."
+  },
+  "output": {
+    "resolution": "1024x1536",
+    "background_outside_card": "transparent or plain white",
+    "format": "PNG"
+  },
+  "negative_prompt": [
+    "photograph of a card",
+    "table",
+    "hands",
+    "perspective tilt",
+    "photorealism",
+    "3D render",
+    "glossy CGI",
+    "flat vector art",
+    "anime",
+    "pixel art",
+    "text",
+    "numbers",
+    "letters",
+    "logos",
+    "watermark",
+    "signature"
+  ]
+}
