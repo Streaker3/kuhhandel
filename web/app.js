@@ -23,7 +23,8 @@ let selectMode = null;   // "offer" | "counter" | null
 let bidValue = 0;
 let botTimer = null;
 let busy = false;
-const imgOk = {};        // key -> true, wenn assets/cards/<key>.png existiert
+const imgOk = {};
+const moneyImg = {};  // Stückelung -> true, wenn assets/money/<d>.png existiert        // key -> true, wenn assets/cards/<key>.png existiert
 
 // --------------------------------------------------------------- Assets
 function probe(src) {
@@ -37,6 +38,9 @@ function probe(src) {
 async function loadAssets() {
   await Promise.all(Object.keys(EMOJI).map(async (k) => {
     imgOk[k] = await probe(`assets/cards/${k}.png`);
+  }));
+  await Promise.all([0, 10, 50, 100, 200, 500].map(async (d) => {
+    moneyImg[d] = await probe(`assets/money/${d}.png`);
   }));
   if (await probe("assets/card_back.png")) document.body.classList.add("img-back");
   if (await probe("assets/table.png")) $("#felt").classList.add("img");
@@ -91,8 +95,7 @@ function cardHTML(a, extra = "") {
     return `<div class="card has-img a-${A.key} ${extra}"><div class="art"><img src="assets/cards/${A.key}.png" alt="${A.name}"></div></div>`;
   }
   return `<div class="card a-${A.key} ${extra}">
-    <span class="val">${A.value}</span><span class="val r">${A.value}</span>
-    <div class="art">${EMOJI[A.key]}</div><div class="name">${A.name}</div></div>`;
+    <span class="val">${A.value}</span><div class="art">${EMOJI[A.key]}</div></div>`;
 }
 function miniHTML(a, cnt, extra = "") {
   const A = V.animals[a];
@@ -253,7 +256,9 @@ function renderWallet(P) {
   const spread = Math.min(50, list.length * 4);
   list.forEach((di, idx) => {
     const d = V.denoms[di];
-    const b = el("div", `bill d${d}`, `<span class="v s">${d}</span><span class="emb">${BILL_EMB[d]}</span><span class="v">${d}</span>`);
+    const b = moneyImg[d]
+      ? el("div", "bill img", `<img src="assets/money/${d}.png" alt="${d}">`)
+      : el("div", `bill d${d}`, `<span class="v s">${d}</span><span class="emb">${BILL_EMB[d]}</span><span class="v">${d}</span>`);
     const ang = list.length > 1 ? -spread / 2 + (spread * idx) / (list.length - 1) : 0;
     const sel = selected.has(idx);
     b.style.left = `${idx * step}px`;

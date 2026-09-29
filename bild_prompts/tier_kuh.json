@@ -1,0 +1,30 @@
+{
+  "task": "Create ONE single playing card as a finished front-facing card image (not a photo of a card, no table, no hands).",
+  "style": {
+    "medium": "hand-drawn cartoon illustration by a professional comic and children's-book illustrator, confident black ink linework with fine hatching, soft watercolor and colored-pencil shading",
+    "character_design": "humorous, slightly exaggerated caricature, big expressive eyes, cheeky grin or funny expression, warm and charming, never childish or crude",
+    "palette": "warm natural earth tones, muted pastels, gentle highlights, no neon colors",
+    "background": "mostly clean off-white / cream card background; only a small, light themed vignette around or under the subject (a patch of ground or a few props), no full-color background fill",
+    "card_frame": "trading-card layout, portrait 2:3, rounded corners, thin white outer border, inner area with soft paper texture",
+    "number_style": "hand-lettered bold chunky numerals, warm golden-yellow fill with thick dark-brown outline and slight drop shadow, like a classic 1990s German family card game",
+    "composition": "subject large and centered, slightly overlapping the vignette, top-left corner kept free for the number",
+    "consistency": "all cards of this set share exactly the same line weight, shading technique, frame, number font and paper texture"
+  },
+  "card": {
+    "subject": "a cheerful brown-and-white dairy cow, head and shoulders, chewing a long grass stalk, big brass cowbell on a leather strap",
+    "themed_vignette": "a few tufts of grass and two daisies at the bottom",
+    "number": {
+      "text": "800",
+      "positions": [
+        "top-left"
+      ],
+      "note": "the ONLY text on the card"
+    }
+  },
+  "output": {
+    "aspect_ratio": "2:3",
+    "resolution": "1024x1536",
+    "background_outside_card": "transparent or plain white"
+  },
+  "negative_prompt": "photorealism, 3D render, glossy CGI, flat vector, anime, pixel art, text other than the specified number, animal names, words, letters, logos, watermark, signature, full saturated background color, busy scenery, cropped subject"
+}

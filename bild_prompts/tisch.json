@@ -1,0 +1,10 @@
+{
+  "task": "Seamless top-down texture of a card-table surface for a game UI.",
+  "subject": "rich green billiard felt (pool-table cloth) with fine fabric texture and soft, even overhead lighting with a subtle vignette, framed by a thick polished dark walnut wooden rim",
+  "constraints": "no pockets, no balls, no cards, no objects, empty center",
+  "style": "photorealistic material textures",
+  "output": {
+    "aspect_ratio": "16:9",
+    "resolution": "2560x1440"
+  }
+}
