@@ -35,6 +35,9 @@ let busy = false;
 let bidHistory = [];       // Gebote der laufenden Versteigerung
 let lastBubble = {};       // p -> zuletzt angezeigte Sprechblase (für Animation nur bei Änderung)
 let lastAmount = null;
+let revealHoldUntil = 0;   // nach einem Verkauf: nächste Karte erst nach Flug + kurzer Pause aufdecken
+let holdTimer = null;
+const REVEAL_PAUSE = 500;
 
 // --------------------------------------------------------------- API
 async function api(path, body) {
@@ -53,6 +56,11 @@ function accept(view) {
   const prev = V;
   const events = view.events.filter((e) => e.i >= since);
   const flights = prev && events.length < 25 ? planFlights(prev, events) : [];
+  if (events.some((e) => ["sold", "bought", "free"].includes(e.kind)) && events.length < 25) {
+    revealHoldUntil = Date.now() + FLY_MS + REVEAL_PAUSE;
+    clearTimeout(holdTimer);
+    holdTimer = setTimeout(render, FLY_MS + REVEAL_PAUSE + 20);
+  }
   V = view;
   for (const ev of events) handleEvent(ev);
   since = view.event_count;
@@ -268,7 +276,8 @@ function renderCenter() {
 
   let shown = null;
   let key = "none";
-  if (V.phase === "auction" && au) { shown = au.card; key = `a${au.card}-${V.deck_left}`; }
+  const holding = Date.now() < revealHoldUntil;
+  if (V.phase === "auction" && au && !holding) { shown = au.card; key = `a${au.card}-${V.deck_left}`; }
   else if (t) { shown = t.animal; key = `t${t.animal}-${t.challenger}-${t.target}`; }
   area.classList.toggle("hidden", shown === null && !V.deck_left);
   const rev = $("#revealed");
@@ -293,7 +302,10 @@ function renderCenter() {
   if (flip) flip.classList.toggle("glow", !!(au && au.high !== null));
 
   const plaque = $("#plaque");
-  if (V.phase === "auction" && au) {
+  if (V.phase === "auction" && au && holding) {
+    plaque.innerHTML = `<div class="lbl">Versteigerer</div><div class="who"><span class="pill auct">🔨 ${nameOf(au.auctioneer)}</span></div>
+      <hr><div class="who">Nächste Karte…</div>`;
+  } else if (V.phase === "auction" && au) {
     const amount = au.high === null ? null : au.amount;
     const bump = amount !== null && amount !== lastAmount;
     lastAmount = amount;
@@ -510,6 +522,11 @@ function renderActions() {
   box.classList.toggle("mine", mine);
   if (V.phase === "over") {
     box.innerHTML = `<div class="waiting">Spiel beendet</div>`;
+    return;
+  }
+  if (mine && V.phase === "auction" && Date.now() < revealHoldUntil) {
+    box.classList.remove("mine");
+    box.innerHTML = `<div class="waiting">Nächste Karte wird aufgedeckt<span class="dots"></span></div>`;
     return;
   }
   if (!mine) {
