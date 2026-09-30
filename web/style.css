@@ -457,3 +457,11 @@ button { font-family: inherit; cursor: pointer; }
 /* Markierte Gegnerkarten: nur beim Überfahren nach vorn, sonst normale Reihenfolge */
 .ogroup.pick { z-index: auto; }
 .ogroup.pick:hover { z-index: 100 !important; }
+/* Scheinwerfer der Gegner: Lichtmitte unter dem Kopf, nach oben früh auslaufend (kein harter Schnitt am Rand) */
+.seat.spot::before {
+  top: -10px; transform: translateX(-50%); width: 460px; height: 320px;
+  background: radial-gradient(ellipse 230px 125px at 50% 110px,
+    rgba(255,240,190,.55) 0%, rgba(255,236,170,.30) 40%, rgba(255,236,170,.10) 72%, rgba(255,236,170,0) 100%);
+}
+/* Aktionsfeld mit fester Mindesthöhe, damit das Spielerschild beim Zugwechsel nicht springt */
+#actions { min-height: 136px; display: flex; flex-direction: column; justify-content: center; }
