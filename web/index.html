@@ -28,7 +28,6 @@
   <div id="me-plate"></div>
   <div id="hand"></div>
   <div id="toasts"></div>
-  <div id="banner"></div>
 
   <div id="top-buttons">
     <button id="menu-toggle" class="round" title="Einstellungen">⚙️</button>
@@ -36,6 +35,8 @@
       <div class="m-lbl">Tempo der Gegner</div>
       <div class="seg" id="m-speed"><button data-s="0">🐢 Langsam</button><button data-s="1">🐇 Normal</button><button data-s="2">⚡ Schnell</button></div>
       <button class="m-item" id="m-log">📜 Spielverlauf</button>
+      <button class="m-item" id="m-rules">📖 Regeln</button>
+      <button class="m-item" id="m-sound">🔊 Ton an</button>
       <button class="m-item" id="m-skip">⏭ Versteigerung überspringen</button>
       <a class="m-item" href="training.html" target="_blank">📈 KI-Training live</a>
       <button class="m-item danger" id="m-new">🔄 Neues Spiel</button>
@@ -46,6 +47,8 @@
     <ol id="log-list"></ol>
   </aside>
 </div>
+
+<div id="banner-wrap"><div id="banner"></div></div>
 
 <div id="overlay" class="show">
   <div class="panel" id="start-panel">
@@ -65,6 +68,11 @@
         <button data-o="ai" class="on">KI</button><button data-o="heuristic">Einfache Bots</button>
       </div>
       <div class="note" id="ai-note"></div>
+    </label>
+    <label id="level-row">Schwierigkeit
+      <div class="seg" id="in-level">
+        <button data-l="leicht">Leicht</button><button data-l="mittel" class="on">Mittel</button><button data-l="schwer">Schwer</button>
+      </div>
     </label>
     <button class="big" id="btn-start">Spiel starten</button>
   </div>

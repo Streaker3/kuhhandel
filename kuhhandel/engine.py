@@ -461,6 +461,9 @@ class Game:
         for i, x in enumerate(t["offer"]):
             self.cash[g][i] += x
         v = notes_value(t["offer"])
+        # Aufdecken nur für den Herausgeforderten: er nimmt den Stapel und sieht ihn
+        self._log(None, {g: ""}, kind="reveal_bids", accepted=True, challenger=c, target=g,
+                  offer=list(t["offer"]), counter=None)
         base = f"{self._sv(g, 'nimmt', 'nimmst')} an. {self._sv(c, 'bekommt', 'bekommst')} {t['k']}× {NAMES[t['animal']]}"
         self._close_trade(c, g, {c: f"{base} und zahlt {v}.", g: f"{base}; du erhältst {v}."})
 
@@ -472,6 +475,9 @@ class Game:
             self.cash[g][i] -= x
         t["counter"] = notes
         vo, vc = notes_value(t["offer"]), notes_value(notes)
+        # Beide Gebote werden aufgedeckt – aber nur für die beiden Beteiligten
+        self._log(None, {c: "", g: ""}, kind="reveal_bids", accepted=False, challenger=c, target=g,
+                  offer=list(t["offer"]), counter=list(notes))
         if vo == vc:
             # Gleichstand: Herausforderer gewinnt, jeder nimmt seinen Stapel zurück
             for i in range(len(DENOMS)):

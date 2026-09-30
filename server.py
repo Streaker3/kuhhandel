@@ -13,16 +13,25 @@ from kuhhandel.engine import Game, IllegalAction
 from kuhhandel.view import player_view
 
 ROOT = Path(__file__).parent
-AI_CKPTS = [ROOT / "checkpoints" / "best.pt", ROOT / "checkpoints" / "latest.pt"]
+CK = ROOT / "checkpoints"
+# Schwierigkeitsstufen = verschieden weit trainierte Stände der KI
+LEVELS = {
+    "leicht": [CK / "snap_00060.pt"],
+    "mittel": [CK / "snap_00150.pt"],
+    "schwer": [CK / "best.pt", CK / "latest.pt"],
+}
 
 
-def ai_checkpoint():
-    return next((p for p in AI_CKPTS if p.exists()), None)
+def ai_checkpoint(level="schwer"):
+    for p in LEVELS.get(level, LEVELS["schwer"]) + LEVELS["schwer"]:
+        if p.exists():
+            return p
+    return None
 
 
-def make_ai_bot():
+def make_ai_bot(level="schwer"):
     """Trainierte KI, falls PyTorch und ein Checkpoint vorhanden sind."""
-    ck = ai_checkpoint()
+    ck = ai_checkpoint(level)
     if ck is None:
         return None
     try:
@@ -39,13 +48,13 @@ lock = threading.Lock()
 state = {"game": None, "bots": {}}
 
 
-def new_game(players: int, name: str, opponents: str = "ai", seed=None):
+def new_game(players: int, name: str, opponents: str = "ai", level: str = "schwer", seed=None):
     names = [name or "Du"] + BOT_NAMES[: players - 1]
     g = Game(players, seed=seed, names=names)
     state["game"] = g
     bots = {}
     for p in range(1, players):
-        bot = make_ai_bot() if opponents == "ai" else None
+        bot = make_ai_bot(level) if opponents == "ai" else None
         bots[p] = bot or HeuristicBot(seed=None)
     state["bots"] = bots
 
@@ -135,7 +144,8 @@ class Handler(BaseHTTPRequestHandler):
             try:
                 client = body.get("client")
                 if path == "/api/new":
-                    new_game(int(body.get("players", 4)), body.get("name", "Du"), body.get("opponents", "ai"))
+                    new_game(int(body.get("players", 4)), body.get("name", "Du"), body.get("opponents", "ai"),
+                             body.get("level", "schwer"))
                     state["owner"] = client
                     return self._json(self._view(0))
                 if path == "/api/takeover":

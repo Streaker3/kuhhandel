@@ -482,3 +482,66 @@ button { font-family: inherit; cursor: pointer; }
   background: radial-gradient(ellipse 240px 130px at 50% 50%,
     rgba(255,240,190,.5) 0%, rgba(255,236,170,.28) 40%, rgba(255,236,170,.09) 72%, rgba(255,236,170,0) 100%);
 }
+
+/* ================================================================ Banner über allem (auch über fliegenden Karten) */
+#banner-wrap { position: fixed; left: 50%; top: 42%; z-index: 800; pointer-events: none; transform-origin: 50% 50%; }
+#banner { position: relative !important; left: auto !important; top: auto !important; transform: none; }
+#banner.show { animation-name: banner2; }
+@keyframes banner2 {
+  0% { transform: scale(.6); opacity: 0; }
+  14% { transform: scale(1.05); opacity: 1; }
+  22% { transform: scale(1); }
+  85% { opacity: 1; }
+  100% { opacity: 0; transform: scale(.97); }
+}
+
+/* ================================================================ Aufdeck-Szene */
+.reveal {
+  position: absolute; left: 800px; top: 250px; transform: translateX(-50%); z-index: 70;
+  background: rgba(24,14,7,.96); border: 3px solid var(--gold); border-radius: 22px; padding: 16px 28px 18px;
+  box-shadow: 0 20px 60px rgba(0,0,0,.6); color: var(--paper); text-align: center; min-width: 520px;
+  animation: revealin .35s ease-out; transition: opacity .3s, transform .3s;
+}
+@keyframes revealin { from { opacity: 0; transform: translateX(-50%) scale(.85); } }
+.reveal.out { opacity: 0; transform: translateX(-50%) scale(.95); }
+.reveal .rtitle { font-family: "Lilita One"; font-size: 30px; color: var(--gold); -webkit-text-stroke: 1.5px var(--wood); paint-order: stroke fill; }
+.reveal .rrow { display: flex; align-items: center; justify-content: center; gap: 30px; margin-top: 10px; }
+.reveal .rside { display: flex; flex-direction: column; align-items: center; gap: 6px; min-width: 200px; }
+.reveal .rwho { font-weight: 600; font-size: 17px; }
+.reveal .rhint { font-size: 12px; opacity: .7; font-weight: 400; }
+.reveal .rvs { font-family: "Lilita One"; font-size: 22px; opacity: .8; }
+.reveal .rcards { position: relative; height: 130px; display: flex; align-items: center; justify-content: center; }
+.reveal .rempty { opacity: .6; font-size: 14px; }
+.reveal .rc { width: 76px; height: 114px; perspective: 600px; position: relative; flex: none; }
+.reveal .rc + .rc { margin-left: -44px; }
+.reveal .rf { position: absolute; inset: 0; border-radius: 6px; background: center / cover; backface-visibility: hidden;
+  box-shadow: 0 4px 10px rgba(0,0,0,.5); transition: transform .45s cubic-bezier(.3,.7,.2,1); }
+.reveal .rb { background-image: url("assets/web/rueckseite_geld.webp"); }
+.reveal .rfront { transform: rotateY(180deg); }
+.reveal .rc.up .rb { transform: rotateY(-180deg); }
+.reveal .rc.up .rfront { transform: rotateY(0deg); }
+.reveal .rc.up { z-index: 2; }
+.reveal .rsum { font-size: 40px; color: var(--gold); -webkit-text-stroke: 1.5px var(--wood); paint-order: stroke fill; }
+.reveal .rsum.bump { animation: bump .3s ease-out; }
+.reveal.win { border-color: #7cc47f; box-shadow: 0 0 0 4px rgba(124,196,127,.4), 0 20px 60px rgba(0,0,0,.6); }
+.reveal.lose { border-color: #ef6f63; box-shadow: 0 0 0 4px rgba(239,111,99,.35), 0 20px 60px rgba(0,0,0,.6); }
+
+/* ================================================================ Quartett-Punkte, Regeln, Konfetti, Ergebnis */
+.scorepop {
+  position: fixed; z-index: 900; transform: translate(-50%, -100%); pointer-events: none;
+  color: #7cc47f; -webkit-text-stroke: 2px var(--wood); paint-order: stroke fill; text-shadow: 0 3px 0 rgba(0,0,0,.3);
+  animation: scorepop 1.9s ease-out forwards;
+}
+@keyframes scorepop { 0% { opacity: 0; transform: translate(-50%, -60%) scale(.6); } 15% { opacity: 1; transform: translate(-50%, -110%) scale(1.1); }
+  80% { opacity: 1; transform: translate(-50%, -190%) scale(1); } 100% { opacity: 0; transform: translate(-50%, -230%); } }
+.rules-ov { position: fixed; inset: 0; z-index: 1100; background: rgba(10,6,2,.72); display: grid; place-items: center; backdrop-filter: blur(4px); }
+.panel.rules { width: min(640px, 92vw); max-height: 86vh; overflow: auto; text-align: left; }
+.panel.rules h2 { font-family: "Lilita One"; font-weight: 400; margin: 0 0 6px; color: var(--wood); }
+.panel.rules h3 { margin: 14px 0 4px; }
+.panel.rules p, .panel.rules li { font-size: 15px; line-height: 1.45; }
+.panel.rules ul { padding-left: 20px; margin: 4px 0; }
+.confetti { position: fixed; inset: 0; z-index: 1050; pointer-events: none; }
+.results .rname { display: flex; flex-direction: column; gap: 4px; }
+.results .qrow { display: flex; gap: 4px; }
+.results .qrow em { font-size: 12px; opacity: .6; font-style: normal; }
+.results .qi { width: 22px; height: 33px; border-radius: 3px; background: center / cover; box-shadow: 0 1px 3px rgba(0,0,0,.35); display: inline-block; }

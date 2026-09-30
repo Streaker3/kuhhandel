@@ -81,8 +81,20 @@ function showOtherTab() {
 
 function accept(view) {
   if (!view) return;
-  const prev = V;
   const events = view.events.filter((e) => e.i >= since);
+  const rv = events.find((e) => e.kind === "reveal_bids");
+  if (rv && V && !FAST && events.length < 25) {
+    // Erst die Gebote aufdecken, dann Ergebnis, Kartenflüge und nächster Zug
+    since = view.event_count;
+    clearTimeout(botTimer);
+    showReveal(rv, () => applyView(view, events));
+    return;
+  }
+  applyView(view, events);
+}
+
+function applyView(view, events) {
+  const prev = V;
   const flights = prev && events.length < 25 ? planFlights(prev, events) : [];
   if (events.some((e) => ["sold", "bought", "free"].includes(e.kind)) && events.length < 25) {
     revealHoldUntil = Date.now() + FLY_MS + REVEAL_PAUSE;
@@ -91,9 +103,10 @@ function accept(view) {
   }
   V = view;
   for (const ev of events) handleEvent(ev);
-  since = view.event_count;
+  since = Math.max(since, view.event_count);
   render();
   runFlights(flights);
+  if (prev && events.length < 25) quartetMoments(prev);
   scheduleBot(events);
 }
 
@@ -437,8 +450,10 @@ function renderWallet() {
   const notes = V.players[V.me].notes;
   const idx = V.denoms.map((_, i) => i).filter((i) => notes[i] > 0);
   const { xs } = packPositions(idx.map(() => OWN.w), V.phase === "trade" ? 470 : 460, 12);
+  if (!selectMode) selected = notes.map(() => 0);   // Auswahl gilt nur im Kuhhandel-Gebot
   idx.forEach((i, k) => {
-    const avail = notes[i] - selected[i];
+    selected[i] = Math.min(selected[i], notes[i]);
+    const avail = Math.max(0, notes[i] - selected[i]);
     const d = V.denoms[i];
     const s = el("div", "mstack" + (avail ? "" : " empty") + (selectMode && avail ? " selectable" : ""));
     s.style.left = `${xs[k]}px`;
@@ -569,6 +584,30 @@ function popsFor(a, c, options) {
   return box;
 }
 
+function quickPick(kind) {
+  const notes = V.players[V.me].notes;
+  if (kind === "all") selected = [...notes];
+  else if (kind === "none") selected = notes.map(() => 0);
+  else if (kind === "zeros") selected[0] = notes[0];
+  else if (kind === "half") {
+    // ungefähr die Hälfte des Bargelds, große Scheine zuerst
+    const target = Math.floor(V.players[V.me].cash / 2);
+    const pick = notes.map(() => 0);
+    let sum = 0;
+    for (let i = notes.length - 1; i >= 1; i--) {
+      while (pick[i] < notes[i] && sum + V.denoms[i] <= target) { pick[i]++; sum += V.denoms[i]; }
+    }
+    pick[0] = selected[0];
+    selected = pick;
+  }
+  render();
+}
+const QUICK_HTML = `<div class="btns quick">
+  <button class="btn small" data-qp="all">All-in</button>
+  <button class="btn small" data-qp="half">Hälfte</button>
+  <button class="btn small" data-qp="zeros">+ alle 0er</button>
+  <button class="btn small" data-qp="none">Leeren</button></div>`;
+const bindQuick = () => document.querySelectorAll("[data-qp]").forEach((b) => (b.onclick = () => quickPick(b.dataset.qp)));
 const cardsLabel = (n) => `${n} Karte${n === 1 ? "" : "n"}`;
 function zeroGo(label = "Verdeckt hinlegen") {
   if (notesCount(selected) > 0) { zeroConfirm = false; return label; }
@@ -708,13 +747,15 @@ function renderActions() {
   const quartet = V.animals[t.animal].value;
   const overWarn = (s) => (notesSum(s) > quartet ? `<div class="hint warn">Achtung: mehr als der ganze Quartettwert (${quartet})!</div>` : "");
   if (t.stage === "offer") {
-    if (selectMode !== "offer") { selectMode = "offer"; renderWallet(); renderOfferPile(); }
+    if (selectMode !== "offer") { selectMode = "offer"; selected = [0, 0, 0, 0, 0, 0]; renderWallet(); renderOfferPile(); }
     box.innerHTML = `<h4>Verdecktes Gebot für ${t.k}× ${V.animals[t.animal].name} von ${nameOf(t.target)}</h4>
       <div>${cardsLabel(notesCount(selected))} · Wert <span class="num" style="font-size:20px">${notesSum(selected)}</span></div>
-      <div class="btns" style="margin-top:10px"><button class="btn primary" id="go">${zeroGo()}</button></div>
+      ${QUICK_HTML}
+      <div class="btns" style="margin-top:8px"><button class="btn primary" id="go">${zeroGo()}</button></div>
       ${overWarn(selected)}
       <div class="hint">${nameOf(t.target)} sieht nur die Anzahl deiner Karten.</div>`;
     $("#go").onclick = () => zeroSubmit("offer");
+    bindQuick();
     return;
   }
   if (selectMode !== "counter") {
@@ -727,9 +768,11 @@ function renderActions() {
   }
   box.innerHTML = `<h4>Dein verdecktes Gegengebot (${nameOf(t.challenger)} bietet ${t.offer_count} Karte${t.offer_count === 1 ? "" : "n"})</h4>
     <div>${cardsLabel(notesCount(selected))} · Wert <span class="num" style="font-size:20px">${notesSum(selected)}</span></div>
-    <div class="btns" style="margin-top:10px"><button class="btn primary" id="go">${zeroGo("Gegengebot legen")}</button><button class="btn small" id="back">Zurück</button></div>
+    ${QUICK_HTML}
+    <div class="btns" style="margin-top:8px"><button class="btn primary" id="go">${zeroGo("Gegengebot legen")}</button><button class="btn small" id="back">Zurück</button></div>
     ${overWarn(selected)}`;
   $("#go").onclick = () => zeroSubmit("counter");
+  bindQuick();
   $("#back").onclick = () => { selectMode = null; selected = [0, 0, 0, 0, 0, 0]; render(); };
 }
 
@@ -852,13 +895,22 @@ function runFlights(flights) {
     if (f.img) c.style.backgroundImage = `url(${f.img})`;
     document.body.appendChild(c);
     const land = () => {
-      if (dest) dest.style.visibility = "";
+      if (dest) {
+        // Zielkarte blendet ein, während der Stellvertreter ausblendet -> kein harter Sprung hinter die Nachbarkarten
+        dest.style.opacity = "0";
+        dest.style.visibility = "";
+        dest.style.transition = "opacity .25s ease";
+        requestAnimationFrame(() => { dest.style.opacity = "1"; });
+        setTimeout(() => { dest.style.transition = ""; dest.style.opacity = ""; }, 320);
+      }
       if (f.badge) {
         const left = pendingBadges.get(f.badge) - 1;
         pendingBadges.set(f.badge, left);
         if (left <= 0) f.badge.style.visibility = "";
       }
-      c.remove();
+      c.style.transition = "opacity .25s ease";
+      c.style.opacity = "0";
+      setTimeout(() => c.remove(), 270);
     };
     setTimeout(() => {
       // Position UND Größe ändern sich nur während des Flugs
@@ -881,8 +933,13 @@ function handleEvent(ev) {
   if (ev.kind === "bid") bidHistory.push({ p: ev.player, amount: ev.amount });
   if (ev.kind === "bust") { li.className = "bad"; bidHistory = []; lastAmount = null; }
   if (["sold", "bought", "free", "trade_result"].includes(ev.kind)) li.className = "good";
+  if (ev.kind === "reveal_bids") return;   // reine Daten für die Aufdeck-Szene
   $("#log-list").appendChild(li);
   $("#log-list").scrollTop = 1e9;
+  const snd = { reveal: "flip", bid: "tick", sold: "sold", bought: "sold", free: "gavel", bust: "bust",
+    donkey: "iah", challenge: "moo", offer: "flip", trade_result: "coins", phase: "fanfare" }[ev.kind];
+  if (snd) Snd.play(snd);
+  if (ev.kind === "over") Snd.play(V.ranking && V.ranking[0] === V.me ? "win" : "lose");
 
   if (ev.kind === "donkey") banner("Esel-Bonus!", ev.text.replace(/^\d+\. Esel! /, ""));
   else if (ev.kind === "bust") {
@@ -904,7 +961,15 @@ function toast(text) {
   setTimeout(() => t.remove(), 4300);
   while ($("#toasts").children.length > 3) $("#toasts").firstChild.remove();
 }
+function placeBanner() {
+  const r = $("#stage").getBoundingClientRect();
+  const w = $("#banner-wrap");
+  w.style.left = `${r.left + r.width / 2}px`;
+  w.style.top = `${r.top + r.height * (380 / 900)}px`;
+  w.style.transform = `translate(-50%, -50%) scale(${r.width / 1600})`;
+}
 function banner(title, text, bad, secs = 2.1) {
+  placeBanner();
   const b = $("#banner");
   b.className = bad ? "bad" : "";
   b.style.animationDuration = `${secs}s`;
@@ -913,9 +978,206 @@ function banner(title, text, bad, secs = 2.1) {
   b.classList.add("show");
 }
 
+// --------------------------------------------------------------- Aufdeck-Szene im Kuhhandel
+// Nur die Karten des Gegners werden umgedreht und gegen das eigene (verdeckt bleibende) Gebot hochgezählt.
+function expandNotes(notes) {
+  const out = [];
+  (notes || []).forEach((c, i) => { for (let k = 0; k < c; k++) out.push(V.denoms[i]); });
+  return out.sort((a, b) => a - b);
+}
+function showReveal(ev, done) {
+  const iAmC = ev.challenger === V.me;
+  const other = iAmC ? ev.target : ev.challenger;
+  const oppCards = expandNotes(iAmC ? ev.counter : ev.offer);
+  const mine = ev.accepted ? null : expandNotes(iAmC ? ev.offer : ev.counter);
+  const mySum = mine ? mine.reduce((a, b) => a + b, 0) : 0;
+  const oppSum = oppCards.reduce((a, b) => a + b, 0);
+  const box = el("div", "reveal");
+  const back = (n, cls) => Array.from({ length: n }, (_, i) =>
+    `<div class="rc ${cls}" style="--i:${i};--n:${n}"><div class="rf rb"></div><div class="rf rfront"></div></div>`).join("");
+  box.innerHTML = `
+    <div class="rtitle">${ev.accepted ? `Du nimmst an – ${nameOf(other)}s Stapel` : "Aufdecken!"}</div>
+    <div class="rrow">
+      <div class="rside"><div class="rwho">${nameOf(other)}</div>
+        <div class="rcards">${back(Math.max(oppCards.length, 0), "opp") || '<span class="rempty">leerer Stapel</span>'}</div>
+        <div class="rsum num" id="rv-opp">0</div></div>
+      ${mine ? `<div class="rvs">gegen</div>
+      <div class="rside"><div class="rwho">Du <span class="rhint">(verdeckt)</span></div>
+        <div class="rcards">${back(mine.length, "mine") || '<span class="rempty">leerer Stapel</span>'}</div>
+        <div class="rsum num">${mySum}</div></div>` : ""}
+    </div>`;
+  $("#stage").appendChild(box);
+  const cards = [...box.querySelectorAll(".rc.opp")];
+  cards.forEach((c, i) => { c.querySelector(".rfront").style.backgroundImage = `url(${geldImg(oppCards[i])})`; });
+  let shown = 0;
+  const STEP = Math.max(140, Math.min(260, 1500 / Math.max(1, cards.length)));
+  cards.forEach((c, i) => setTimeout(() => {
+    c.classList.add("up");
+    Snd.play("flip");
+    shown += oppCards[i];
+    const s = $("#rv-opp");
+    if (s) { s.textContent = shown; s.classList.remove("bump"); void s.offsetWidth; s.classList.add("bump"); }
+  }, 450 + i * STEP));
+  const end = 450 + cards.length * STEP + 500;
+  setTimeout(() => {
+    if (mine) {
+      // Gewinner: höheres Gebot, Gleichstand -> Herausforderer
+      const iWin = mySum > oppSum || (mySum === oppSum && iAmC);
+      box.classList.add(iWin ? "win" : "lose");
+    }
+  }, end);
+  setTimeout(() => { box.classList.add("out"); setTimeout(() => box.remove(), 350); done(); }, end + 1100);
+}
+
+// --------------------------------------------------------------- Quartett-Momente
+function quartetMoments(prev) {
+  let delay = 900;
+  for (let p = 0; p < V.n; p++) {
+    const before = prev.players[p].animals, after = V.players[p].animals;
+    for (let a = 0; a < after.length; a++) {
+      if (after[a] === 4 && before[a] !== 4) {
+        const gain = scoreOf(after) - scoreOf(before);
+        setTimeout(() => {
+          Snd.play("chime");
+          banner("Quartett!", `${p === V.me ? "Du hast" : `${V.players[p].name} hat`} alle vier ${V.animals[a].name === "Schaf" ? "Schafe" : V.animals[a].name + "-Karten"} – jetzt ${scoreOf(after)} Punkte`, false, 2.4);
+          scorePop(p, `+${gain}`);
+        }, delay);
+        delay += 1200;
+      }
+    }
+  }
+}
+function scorePop(p, text) {
+  const anchor = p === V.me ? $("#me-plate .nameplate") : document.querySelector(`.seat[data-p="${p}"] .nameplate`);
+  if (!anchor) return;
+  const r = anchor.getBoundingClientRect();
+  const s = $("#stage").getBoundingClientRect().width / 1600;
+  const pop = el("div", "scorepop num", text);
+  Object.assign(pop.style, { left: `${r.left + r.width / 2}px`, top: `${r.top}px`, fontSize: `${40 * s}px` });
+  document.body.appendChild(pop);
+  setTimeout(() => pop.remove(), 1900);
+}
+
+// --------------------------------------------------------------- Sounds (synthetisch, keine Dateien nötig)
+const Snd = {
+  ctx: null,
+  on: (() => { try { return localStorage.getItem("kh-sound") !== "0"; } catch (e) { return true; } })(),
+  init() {
+    if (this.ctx) return;
+    try { this.ctx = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) { this.ctx = null; }
+  },
+  tone(f0, dur, { type = "sine", vol = 0.12, at = 0, f1 = null, lp = null } = {}) {
+    const c = this.ctx, t = c.currentTime + at;
+    const o = c.createOscillator(), g = c.createGain();
+    o.type = type;
+    o.frequency.setValueAtTime(f0, t);
+    if (f1) o.frequency.exponentialRampToValueAtTime(f1, t + dur);
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(vol, t + 0.012);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    let node = o;
+    if (lp) { const fl = c.createBiquadFilter(); fl.type = "lowpass"; fl.frequency.value = lp; o.connect(fl); node = fl; }
+    node.connect(g); g.connect(c.destination);
+    o.start(t); o.stop(t + dur + 0.05);
+  },
+  noise(dur, { vol = 0.2, at = 0, hp = null, lp = null } = {}) {
+    const c = this.ctx, t = c.currentTime + at;
+    const buf = c.createBuffer(1, Math.ceil(c.sampleRate * dur), c.sampleRate);
+    const d = buf.getChannelData(0);
+    for (let i = 0; i < d.length; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / d.length);
+    const src = c.createBufferSource(), g = c.createGain();
+    src.buffer = buf;
+    let node = src;
+    if (hp) { const f = c.createBiquadFilter(); f.type = "highpass"; f.frequency.value = hp; node.connect(f); node = f; }
+    if (lp) { const f = c.createBiquadFilter(); f.type = "lowpass"; f.frequency.value = lp; node.connect(f); node = f; }
+    g.gain.value = vol;
+    node.connect(g); g.connect(c.destination);
+    src.start(t);
+  },
+  play(name) {
+    if (!this.on || FAST) return;
+    this.init();
+    if (!this.ctx) return;
+    if (this.ctx.state === "suspended") this.ctx.resume();
+    const T = this;
+    ({
+      flip: () => T.noise(0.07, { vol: 0.22, hp: 1800 }),
+      tick: () => T.tone(900, 0.05, { type: "square", vol: 0.035 }),
+      gavel: () => { T.tone(160, 0.14, { type: "triangle", vol: 0.35 }); T.noise(0.05, { vol: 0.3, lp: 900 }); },
+      coins: () => [1900, 2500, 2200, 2800].forEach((f, i) => T.tone(f, 0.13, { vol: 0.05, at: i * 0.055 })),
+      sold: () => { T.play("gavel"); setTimeout(() => T.play("coins"), 180); },
+      bust: () => T.tone(230, 0.45, { type: "sawtooth", vol: 0.07, f1: 110, lp: 900 }),
+      iah: () => { T.tone(480, 0.22, { type: "sawtooth", vol: 0.06, f1: 720, lp: 1500 }); T.tone(720, 0.35, { type: "sawtooth", vol: 0.06, at: 0.23, f1: 330, lp: 1200 }); },
+      moo: () => T.tone(130, 0.7, { type: "sawtooth", vol: 0.08, f1: 98, lp: 480 }),
+      chime: () => [1047, 1319, 1568, 2093].forEach((f, i) => T.tone(f, 0.35, { vol: 0.06, at: i * 0.09 })),
+      win: () => [523, 659, 784, 1047, 1319].forEach((f, i) => T.tone(f, 0.28, { type: "triangle", vol: 0.1, at: i * 0.11 })),
+      lose: () => [392, 330, 262].forEach((f, i) => T.tone(f, 0.3, { type: "triangle", vol: 0.08, at: i * 0.16 })),
+      fanfare: () => [392, 523, 659, 784].forEach((f, i) => T.tone(f, 0.22, { type: "triangle", vol: 0.08, at: i * 0.1 })),
+    }[name] || (() => {}))();
+  },
+};
+
+// --------------------------------------------------------------- Regeln
+const RULES_HTML = `
+  <h2>Kurzregeln (Hausregeln)</h2>
+  <h3>Ziel</h3>
+  <p>Sammle vollständige Quartette (alle 4 Karten einer Tierart). Punkte = Summe der Quartettwerte × Anzahl deiner Quartette. Unvollständige Sätze zählen nichts. Gleichstand: mehr Bargeld gewinnt.</p>
+  <h3>Phase 1 – Versteigerung</h3>
+  <ul>
+    <li>Reihum ist jemand Versteigerer und bietet selbst nicht mit. Gebote in 10er-Schritten, mindestens 10 über dem Höchstgebot.</li>
+    <li>Passen gilt nur, bis jemand anderes höher bietet – dann darfst du wieder mitbieten.</li>
+    <li><b>Bluffen</b> ist erlaubt, aber höchstens bis <b>2 × Bargeld + 100</b> (dein Limit).</li>
+    <li>Der Versteigerer wählt: <b>Geld nehmen</b> (Bieter zahlt ihm, bekommt die Karte) oder <b>selbst kaufen</b> (er zahlt dem Bieter und behält die Karte).</li>
+    <li>Kann der Bieter nicht zahlen, fliegt er auf: Sein Geld wird gezeigt und die Karte ohne ihn neu versteigert.</li>
+    <li>Bezahlt wird mit Geldkarten, <b>ohne Wechselgeld</b>.</li>
+    <li>Bei jedem Esel bekommt jeder einen Bonus: 50, 100, 200, 500.</li>
+  </ul>
+  <h3>Phase 2 – Kuhhandel</h3>
+  <ul>
+    <li>Wer dran ist, fordert jemanden heraus, der dieselbe Tierart (unvollständig) hat. Haben beide mindestens 2, geht es um 2 Karten, sonst um 1.</li>
+    <li>Der Herausforderer legt verdeckt Geldkarten hin – der Gegner sieht nur die Anzahl.</li>
+    <li>Der Gegner <b>nimmt an</b> (er bekommt das Geld, der Herausforderer die Karten) oder macht ein <b>Gegengebot</b>.</li>
+    <li>Beim Gegengebot gewinnt das höhere Gebot und zahlt nur die <b>Differenz</b>. Gleichstand: Der Herausforderer gewinnt, kein Geld fließt.</li>
+    <li>Herausfordern ist Pflicht, solange es möglich ist.</li>
+  </ul>
+  <h3>Bedienung</h3>
+  <p>Enter = bieten, Esc = passen, ↑/↓ = ±10. Als Versteigerer: G = Geld nehmen, K = selbst kaufen.</p>`;
+function showRules() {
+  const ov = el("div", "rules-ov", `<div class="panel rules">${RULES_HTML}<button class="big" id="rules-close">Verstanden</button></div>`);
+  document.body.appendChild(ov);
+  const close = () => ov.remove();
+  ov.onclick = (e) => { if (e.target === ov) close(); };
+  $("#rules-close").onclick = close;
+}
+
+// --------------------------------------------------------------- Konfetti
+function confetti() {
+  const cv = el("canvas", "confetti");
+  cv.width = innerWidth; cv.height = innerHeight;
+  document.body.appendChild(cv);
+  const ctx = cv.getContext("2d");
+  const cols = ["#f5c542", "#7cc47f", "#ef9f96", "#9ec6ef", "#fbf3df", "#f6b26b"];
+  const parts = Array.from({ length: 160 }, () => ({
+    x: Math.random() * cv.width, y: -20 - Math.random() * cv.height * 0.5,
+    vx: (Math.random() - 0.5) * 3, vy: 2 + Math.random() * 3, r: Math.random() * 6.28, vr: (Math.random() - 0.5) * 0.3,
+    w: 6 + Math.random() * 8, h: 4 + Math.random() * 6, c: cols[Math.floor(Math.random() * cols.length)],
+  }));
+  const t0 = performance.now();
+  const tick = (t) => {
+    ctx.clearRect(0, 0, cv.width, cv.height);
+    for (const p of parts) {
+      p.x += p.vx; p.y += p.vy; p.vy += 0.04; p.r += p.vr;
+      ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(p.r); ctx.fillStyle = p.c; ctx.fillRect(-p.w / 2, -p.h / 2, p.w, p.h); ctx.restore();
+    }
+    if (t - t0 < 4500) requestAnimationFrame(tick); else cv.remove();
+  };
+  requestAnimationFrame(tick);
+}
+
 // --------------------------------------------------------------- Start / Ende / Menü
 let nPlayers = 4;
 let opponents = "ai";
+let level = "mittel";
 const START_HTML = $("#overlay").innerHTML;
 function segment(sel, attr, cb) {
   document.querySelectorAll(`${sel} button`).forEach((b) => (b.onclick = () => {
@@ -926,7 +1188,9 @@ function segment(sel, attr, cb) {
 }
 function bindStart() {
   segment("#in-players", "n", (v) => (nPlayers = +v));
-  segment("#in-opp", "o", (v) => (opponents = v));
+  segment("#in-opp", "o", (v) => { opponents = v; $("#level-row").style.display = v === "ai" ? "" : "none"; });
+  segment("#in-level", "l", (v) => (level = v));
+  document.querySelector(`#in-level [data-l="${level}"]`)?.click();
   document.querySelector(`#in-players [data-n="${nPlayers}"]`)?.click();
   fetch("/api/info").then((r) => r.json()).then((info) => {
     if (!info.ai_available) {
@@ -947,7 +1211,7 @@ function bindStart() {
     $("#log-list").innerHTML = "";
     $("#seats").dataset.players = "";
     $("#overlay").classList.remove("show");
-    accept(await api("/api/new", { players: nPlayers, name: $("#in-name").value.trim() || "Du", opponents }));
+    accept(await api("/api/new", { players: nPlayers, name: $("#in-name").value.trim() || "Du", opponents, level }));
   };
 }
 bindStart();
@@ -967,6 +1231,17 @@ segment("#m-speed", "s", (v) => {
 });
 document.querySelector(`#m-speed [data-s="${speed}"]`).classList.add("on");
 $("#m-log").onclick = () => { closeMenu(); $("#log").classList.add("open"); };
+$("#m-rules").onclick = () => { closeMenu(); showRules(); };
+const updSound = () => { $("#m-sound").textContent = Snd.on ? "🔊 Ton an" : "🔇 Ton aus"; };
+$("#m-sound").onclick = () => {
+  Snd.on = !Snd.on;
+  try { localStorage.setItem("kh-sound", Snd.on ? "1" : "0"); } catch (e) { /* egal */ }
+  updSound();
+  if (Snd.on) Snd.play("coins");
+};
+updSound();
+// Browser erlauben Ton erst nach einer Nutzeraktion
+document.addEventListener("pointerdown", () => Snd.init(), { once: true });
 $("#m-skip").onclick = async () => {
   closeMenu();
   if (busy) return;
@@ -994,14 +1269,21 @@ document.addEventListener("click", (e) => {
 function showResults() {
   const ov = $("#overlay");
   if (ov.classList.contains("show")) return;
-  const rows = V.ranking.map((p, i) => `<div class="r ${i === 0 ? "win" : ""}">
-      <span>${i === 0 ? "🏆" : `${i + 1}.`} ${V.players[p].name}</span>
-      <span><span class="num">${V.scores[p]}</span> Pkt · 💰 ${V.cash_all[p]}</span></div>`).join("");
+  const rows = V.ranking.map((p, i) => {
+    const quads = V.players[p].animals.map((c, a) => (c === 4 ? a : -1)).filter((a) => a >= 0);
+    const icons = quads.map((a) => `<i class="qi" style="background-image:url(${tierImg(animalKey(a))})" title="${V.animals[a].name} (${V.animals[a].value})"></i>`).join("");
+    return `<div class="r ${i === 0 ? "win" : ""}">
+      <span class="rname">${i === 0 ? "🏆" : `${i + 1}.`} ${V.players[p].name}<span class="qrow">${icons || '<em>kein Quartett</em>'}</span></span>
+      <span><span class="num">${V.scores[p]}</span> Pkt · 💰 ${V.cash_all[p]}</span></div>`;
+  }).join("");
   ov.innerHTML = `<div class="panel"><h1>${V.ranking[0] === V.me ? "Gewonnen!" : "Spielende"}</h1>
     <p class="sub">Quartettwert × Anzahl Quartette</p>
     <div class="results">${rows}</div><button class="big" id="again">Nochmal spielen</button></div>`;
   $("#again").onclick = showStart;
-  setTimeout(() => ov.classList.add("show"), 1800);
+  setTimeout(() => {
+    ov.classList.add("show");
+    if (V.ranking[0] === V.me) confetti();
+  }, 1800);
 }
 
 function fit() {
@@ -1009,7 +1291,7 @@ function fit() {
   $("#stage").style.transform = `translate(-50%, -50%) scale(${s})`;
 }
 fit();
-window.addEventListener("resize", fit);
+window.addEventListener("resize", () => { fit(); placeBanner(); });
 api("/api/takeover", {}).then((v) => {
   if (v && v.phase !== "none" && v.phase !== "over") {
     $("#overlay").classList.remove("show");
