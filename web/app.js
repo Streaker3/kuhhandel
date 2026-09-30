@@ -30,7 +30,18 @@ let since = 0;             // Anzahl bereits gesehener Ereignisse
 let selected = [0, 0, 0, 0, 0, 0]; // für Kuhhandel ausgewählte Geldkarten je Stückelung
 let selectMode = null;     // "offer" | "counter" | null
 let bidValue = 0;
-let bidKey = "";         // ändert sich mit Karte/Wiederholung/Mindestgebot -> Gebotsfeld zurücksetzen
+let bidKey = "";
+// Komfort: nach zweimal Passen beim selben Tier passt man automatisch weiter (nur für dieses Tier)
+let passCount = { key: "", n: 0 };
+let autoPassKey = "";
+let autoPassTimer = null;
+const animalKeyNow = () => (V.auction ? `${V.auction.card}-${V.deck_left}` : "");
+function myPass() {
+  const k = animalKeyNow();
+  passCount = passCount.key === k ? { key: k, n: passCount.n + 1 } : { key: k, n: 1 };
+  if (passCount.n >= 2) autoPassKey = k;
+  act({ kind: "pass" });
+}         // ändert sich mit Karte/Wiederholung/Mindestgebot -> Gebotsfeld zurücksetzen
 let botTimer = null;
 let busy = false;
 let bidHistory = [];       // Gebote der laufenden Versteigerung
@@ -796,6 +807,17 @@ function renderActions() {
     return;
   }
   const au = V.auction;
+  if (V.phase === "auction" && au.stage === "bidding" && autoPassKey === animalKeyNow()) {
+    box.classList.remove("mine");
+    box.innerHTML = `<h4>Du passt bei ${V.animals[au.card].name} automatisch</h4>
+      <div class="btns"><button class="btn small" id="unpass">Doch mitbieten</button></div>`;
+    $("#unpass").onclick = () => { autoPassKey = ""; clearTimeout(autoPassTimer); passCount = { key: "", n: 0 }; render(); };
+    clearTimeout(autoPassTimer);
+    autoPassTimer = setTimeout(() => {
+      if (autoPassKey === animalKeyNow() && V.to_act === V.me && V.auction && V.auction.stage === "bidding") act({ kind: "pass" });
+    }, 700);
+    return;
+  }
   if (V.phase === "auction" && au.stage === "bidding") {
     const min = au.min_bid;
     const key = `${au.card}-${V.deck_left}-${au.excluded.length}-${min}`;
@@ -817,7 +839,8 @@ function renderActions() {
         <button class="btn danger" id="bpass" title="Esc">Passen</button>
       </div>
       <div class="btns quick">${quick.map(([l, q]) => `<button class="btn small" data-q="${q}" ${q > V.cap || q < min ? "disabled" : ""}
-        title="${l === "Max" ? "Dein gesamtes Bargeld bieten" : ""}">${l} <b class="num">${q}</b></button>`).join("")}</div>
+        title="${l === "Max" ? "Dein gesamtes Bargeld bieten" : ""}">${l} <b class="num">${q}</b></button>`).join("")}
+        <button class="btn small out" id="bout" title="Passen und bei diesem Tier nicht mehr mitbieten">Aussteigen</button></div>
       <div class="hint" id="bhint"></div>`;
     const input = $("#bv");
     const valid = () => Number.isInteger(bidValue) && bidValue % 10 === 0 && bidValue >= min && bidValue <= V.cap;
@@ -825,7 +848,8 @@ function renderActions() {
       if (!fromInput) input.value = bidValue;
       const h = $("#bhint");
       const go = $("#bgo");
-      let msg = "";
+      // nach dem ersten Passen beim selben Tier darauf hinweisen, was ein zweites Passen bewirkt
+      let msg = passCount.key === animalKeyNow() && passCount.n === 1 ? "Nochmal passen = du steigst bei diesem Tier ganz aus." : "";
       let cls = "hint";
       if (!valid()) {
         cls += " warn";
@@ -851,10 +875,11 @@ function renderActions() {
     input.oninput = () => { bidValue = parseInt(input.value.replace(/\D/g, ""), 10) || 0; upd(true); };
     box.querySelectorAll("[data-q]").forEach((b) => (b.onclick = () => { bidValue = +b.dataset.q; upd(); input.focus(); }));
     $("#bgo").onclick = submit;
-    $("#bpass").onclick = () => act({ kind: "pass" });
+    $("#bpass").onclick = myPass;
+    $("#bout").onclick = () => { autoPassKey = animalKeyNow(); act({ kind: "pass" }); };
     keyHandler = (e) => {
       if (e.key === "Enter") { e.preventDefault(); submit(); }
-      else if (e.key === "Escape") { e.preventDefault(); act({ kind: "pass" }); }
+      else if (e.key === "Escape") { e.preventDefault(); myPass(); }
       else if (e.key === "ArrowUp") { e.preventDefault(); $("#bp").click(); }
       else if (e.key === "ArrowDown") { e.preventDefault(); $("#bm").click(); }
     };
