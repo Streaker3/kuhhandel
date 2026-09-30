@@ -9,7 +9,8 @@ const AVATAR_ANIMAL = ["hahn", "kuh", "esel", "schwein", "ziege"];
 const A = "assets/web/";
 const tierImg = (key) => `${A}tier_${key}.webp`;
 const geldImg = (d) => `${A}geld_${d}.webp`;
-const OWN = { w: 110, h: 165 }, OPP = { w: 84, h: 126 }, WAL = { w: 88, h: 132 };
+// Touch-Geräte (Handy/Tablet): kein Hover, Tippen statt Überfahren
+const TOUCH = matchMedia("(hover: none)").matches;
 
 const $ = (s) => document.querySelector(s);
 const el = (tag, cls, html) => {
@@ -212,15 +213,40 @@ function packPositions(widths, avail, gap) {
   return { xs, width: Math.min(total, avail) };
 }
 
-// Sitzpositionen der Gegner [Mitte x, Oberkante y, Breite] je Anzahl Gegner
-const SEAT_POS = {
-  1: [[800, 62, 440, 1]],
-  2: [[430, 62, 560, 1], [1170, 62, 560, 1]],
-  3: [[215, 120, 250, 2], [800, 62, 340, 1], [1385, 120, 250, 2]],
-  4: [[215, 120, 250, 2], [600, 62, 300, 1], [1000, 62, 300, 1], [1385, 120, 250, 2]],
-};
 const MONEY_FAN = [0, 2, 3, 5, 7, 9]; // grobe Stapelgröße -> gezeigte Rückseiten (nicht exakt)
-const ROW_STEP = 88;                 // vertikaler Abstand zweier Kartenreihen bei seitlichen Gegnern
+
+// Zwei Tisch-Anordnungen: quer (Computer, Tablet) und hochkant (Handy). Alle Maße in Bühnen-Pixeln.
+// seats: je Anzahl Gegner [Mitte x, Oberkante y, Breite, Kartenreihen], im Uhrzeigersinn ab dem linken Nachbarn.
+const LAYOUT = {
+  land: {
+    name: "land", w: 1600, h: 900, frame: 70,
+    own: { w: 110, h: 165 }, own2: { w: 124, h: 186 }, opp: { w: 84, h: 126 }, oppDX: 10, rowStep: 88,
+    wal: { w: 88, h: 132 }, mini: { w: 40, h: 60, dx: 5 }, ts: { w: 64, h: 96, dx: 40 }, offer: { w: 110, h: 165, p2: 84 },
+    handW: [480, 500], handDX: 16, handDY: 8, handGap: [14, 22], walW: [460, 470], offerW: 460,
+    seatWide: [760, 470], spotMin: [170, 130], popReach: 170, tStep: [30, 26],
+    seats: {
+      1: [[800, 62, 440, 1]],
+      2: [[430, 62, 560, 1], [1170, 62, 560, 1]],
+      3: [[215, 120, 250, 2], [800, 62, 340, 1], [1385, 120, 250, 2]],
+      4: [[215, 120, 250, 2], [600, 62, 300, 1], [1000, 62, 300, 1], [1385, 120, 250, 2]],
+    },
+  },
+  port: {
+    name: "port", w: 480, h: 1040, frame: 16,
+    own: { w: 72, h: 108 }, own2: { w: 76, h: 114 }, opp: { w: 46, h: 69 }, oppDX: 6, rowStep: 46,
+    wal: { w: 56, h: 84 }, mini: { w: 22, h: 33, dx: 3 }, ts: { w: 40, h: 60, dx: 24 }, offer: { w: 64, h: 96, p2: 64 },
+    handW: [448, 448], handDX: 11, handDY: 5, handGap: [8, 12], walW: [226, 226], offerW: 440,
+    seatWide: [448, 300], spotMin: [100, 76], popReach: 100, tStep: [20, 16],
+    seats: {
+      1: [[240, 52, 440, 1]],
+      2: [[124, 52, 216, 2], [356, 52, 216, 2]],
+      3: [[124, 232, 216, 2], [240, 52, 300, 2], [356, 232, 216, 2]],
+      4: [[124, 232, 216, 2], [124, 52, 216, 2], [356, 52, 216, 2], [356, 232, 216, 2]],
+    },
+  },
+};
+let L = LAYOUT.land;
+const isPort = () => L === LAYOUT.port;
 
 /** Breite einer Tiergruppe: komplette Quartette liegen eng als ein Stapel. */
 const groupWidth = (c, w, dx) => (c === 4 ? w + 3 * 3 : w + (c - 1) * dx);
@@ -234,10 +260,10 @@ let dimTimer = null;
 /** Auslage eines Gegners normal oder breit aufgefächert anordnen (animiert über CSS-Übergänge). */
 function applySeatLayout(seat, p, wide) {
   const x = +seat.dataset.x, w = +seat.dataset.w, rows = +seat.dataset.rows;
-  const W = wide ? (rows === 1 ? 760 : 470) : w;
+  const W = wide ? L.seatWide[rows === 1 ? 0 : 1] : w;
   const lay = seatLayout(p, W, rows, wide ? 16 : 8);
   // im Tisch bleiben
-  const cx = Math.min(Math.max(x, 70 + W / 2), 1530 - W / 2);
+  const cx = Math.min(Math.max(x, L.frame + W / 2), L.w - L.frame - W / 2);
   seat.style.left = `${cx}px`;
   seat.style.width = `${W}px`;
   const box = seat.querySelector(".opp-animals");
@@ -251,11 +277,11 @@ function applySeatLayout(seat, p, wide) {
 /** Tisch abdunkeln, nur ein Bereich bleibt im Licht. */
 function dimAt(rect, { instant = false, second = null } = {}) {
   const st = $("#stage").getBoundingClientRect();
-  const s = st.width / 1600;
+  const s = st.width / L.w;
   const d = $("#dim");
   const geo = (r) => ({
     cx: (r.left + r.width / 2 - st.left) / s, cy: (r.top + r.height / 2 - st.top) / s,
-    rx: Math.max(170, r.width / s / 2 + 90), ry: Math.max(130, r.height / s / 2 + 70),
+    rx: Math.max(L.spotMin[0], r.width / s / 2 + L.spotMin[0] / 2), ry: Math.max(L.spotMin[1], r.height / s / 2 + L.spotMin[1] / 2),
   });
   const a = geo(rect), b = second ? geo(second) : a;   // ohne zweiten Kegel liegen beide übereinander
   if (instant) d.style.transition = "opacity .3s";
@@ -359,35 +385,35 @@ function render() {
 function seatLayout(p, width, rows, gap = 8) {
   const groups = [];
   shownAnimals(p).forEach((c, a) => { if (c) groups.push([a, c]); });
-  const DX = 10;
+  const DX = L.oppDX;
   const perRow = Math.max(1, Math.ceil(groups.length / rows));
   const usedRows = Math.max(1, Math.ceil(groups.length / perRow));
   const pos = {};
   let boxW = 0;
   for (let r = 0; r < usedRows; r++) {
     const rowGroups = groups.slice(r * perRow, (r + 1) * perRow);
-    const widths = rowGroups.map(([, c]) => groupWidth(c, OPP.w, DX));
+    const widths = rowGroups.map(([, c]) => groupWidth(c, L.opp.w, DX));
     const { xs, width: rw } = packPositions(widths, width, gap);
     boxW = Math.max(boxW, rw);
-    rowGroups.forEach(([a], gi) => { pos[a] = { left: xs[gi], top: r * ROW_STEP, width: widths[gi], z: r * 20 + gi + 1 }; });
+    rowGroups.forEach(([a], gi) => { pos[a] = { left: xs[gi], top: r * L.rowStep, width: widths[gi], z: r * 20 + gi + 1 }; });
   }
-  return { groups, pos, boxW, h: OPP.h + (usedRows - 1) * ROW_STEP + 8 };
+  return { groups, pos, boxW, h: L.opp.h + (usedRows - 1) * L.rowStep + 8 };
 }
 
 function seatHTML(p, width, rows) {
   const P = V.players[p];
   const revealed = P.revealed !== undefined ? ` · <span title="nach Zahlungsunfähigkeit offengelegt">💰${P.revealed}</span>` : "";
   // Geld: kleiner Fächer aus Rückseiten, Anzahl nur grob
-  const k = MONEY_FAN[P.stack];
+  const k = MONEY_FAN[P.stack], M = L.mini;
   let money = "";
   for (let i = 0; i < k; i++) {
-    money += `<div class="card mback" style="width:40px;height:60px;left:${i * 5}px;bottom:0;transform:rotate(${(i - (k - 1) / 2) * 4}deg)"></div>`;
+    money += `<div class="card mback" style="width:${M.w}px;height:${M.h}px;left:${i * M.dx}px;bottom:0;transform:rotate(${(i - (k - 1) / 2) * 4}deg)"></div>`;
   }
-  const moneyBox = `<div class="mini-money" style="width:${k ? 40 + 5 * (k - 1) : 40}px" title="Geld (nur grob sichtbar)">${money || '<span class="broke">pleite</span>'}</div>`;
+  const moneyBox = `<div class="mini-money" style="width:${k ? M.w + M.dx * (k - 1) : M.w}px" title="Geld (nur grob sichtbar)">${money || '<span class="broke">pleite</span>'}</div>`;
   // Tiere: pro Art ein Stapel, bei seitlichen Gegnern auf zwei Reihen verteilt
   const pickable = new Set((V.options || []).filter((o) => o.target === p).map((o) => o.animal));
   const { groups, pos, boxW, h } = seatLayout(p, width, rows);
-  const DX = 10;
+  const DX = L.oppDX;
   let animals = "";
   groups.forEach(([a, c]) => {
     const dx = groupDX(c, DX);
@@ -414,7 +440,7 @@ function seatHTML(p, width, rows) {
 
 function renderSeats() {
   const box = $("#seats");
-  const pos = SEAT_POS[V.n - 1];
+  const pos = L.seats[V.n - 1];
   const want = [];
   for (let i = 1; i < V.n; i++) want.push((V.me + i) % V.n);
   if (box.dataset.players !== want.join(",")) {
@@ -437,7 +463,7 @@ function renderSeats() {
     seat.style.top = `${y}px`;
     seat.classList.toggle("active", V.to_act === p);
     seat.classList.toggle("spot", !!(V.auction && V.phase === "auction" && V.auction.auctioneer === p) && Date.now() >= spotReadyAt);
-    seat.classList.toggle("rside", x > 1200);
+    seat.classList.toggle("rside", x > L.w * 0.7);
     const html = seatHTML(p, w, rows);
     if (seat.dataset.html !== html) {
       seat.dataset.html = html;
@@ -542,11 +568,11 @@ function tradeCardsHTML(t) {
   let cards = "";
   for (let i = 0; i < n; i++) {
     const side = i < t.k ? 0 : 1;
-    const x = i * 30 + side * 26;
+    const x = i * L.tStep[0] + side * L.tStep[1];
     const r = (i - (n - 1) / 2) * 5;
     cards += `<div class="card mid tcard" style="left:${x}px;top:${Math.abs(r) * 0.8}px;transform:rotate(${r}deg);background-image:url(${img})"></div>`;
   }
-  const w = (n - 1) * 30 + 26;
+  const w = (n - 1) * L.tStep[0] + L.tStep[1];
   return `<div class="tcards">${cards}
     <span class="tname l">${nameOf(t.challenger)}</span>
     <span class="tname r" style="left:${w}px">${nameOf(t.target)}</span></div>`;
@@ -555,6 +581,7 @@ function tradeCardsHTML(t) {
 function renderTopButtons() {
   $("#m-skip").style.display = V.phase === "auction" ? "" : "none";
   $("#stage").classList.toggle("p2", V.phase !== "auction");
+  $("#stage").classList.toggle("o34", V.n >= 4);   // hochkant: zwei Reihen Gegner
 }
 
 function renderMePlate() {
@@ -579,7 +606,7 @@ function renderWallet() {
   w.innerHTML = "";
   const notes = V.players[V.me].notes;
   const idx = V.denoms.map((_, i) => i).filter((i) => notes[i] > 0);
-  const { xs } = packPositions(idx.map(() => WAL.w), V.phase === "trade" ? 470 : 460, 10);
+  const { xs } = packPositions(idx.map(() => L.wal.w), L.walW[V.phase === "trade" ? 1 : 0], isPort() ? 6 : 10);
   if (!selectMode) selected = notes.map(() => 0);   // Auswahl gilt nur im Kuhhandel-Gebot
   idx.forEach((i, k) => {
     selected[i] = Math.min(selected[i], notes[i]);
@@ -605,19 +632,21 @@ function renderWallet() {
 function renderOfferPile() {
   const box = $("#offer-pile");
   box.classList.toggle("show", !!selectMode);
+  $("#stage").classList.toggle("selecting", !!selectMode);   // hochkant: Gebot liegt dort, wo sonst die Tierkarten sind
   if (!selectMode) { box.innerHTML = ""; return; }
   const list = [];
   selected.forEach((c, i) => { for (let k = 0; k < c; k++) list.push(i); });
   const sum = list.reduce((s, i) => s + V.denoms[i], 0);
-  box.innerHTML = `<span class="title">${selectMode === "offer" ? "Dein Gebot" : "Dein Gegengebot"}: ${list.length} Karte${list.length === 1 ? "" : "n"} · Wert <b>${sum}</b> <span style="opacity:.75">(Karte anklicken = zurücklegen)</span></span>`;
+  box.innerHTML = `<span class="title">${selectMode === "offer" ? "Dein Gebot" : "Dein Gegengebot"}: ${list.length} Karte${list.length === 1 ? "" : "n"} · Wert <b>${sum}</b> <span style="opacity:.75">(Karte ${TOUCH ? "antippen" : "anklicken"} = zurücklegen)</span></span>`;
   if (!list.length) {
-    box.innerHTML += `<div class="empty-hint">⬇ Klicke unten auf deine Geldstapel, um Karten hierher zu legen.</div>`;
+    box.innerHTML += `<div class="empty-hint">⬇ ${TOUCH ? "Tippe" : "Klicke"} unten auf deine Geldstapel, um Karten hierher zu legen.</div>`;
     return;
   }
-  const step = list.length > 1 ? Math.min(60, (460 - OWN.w) / (list.length - 1)) : 0;
+  const cw = V.phase === "trade" ? L.offer.p2 : L.offer.w;
+  const step = list.length > 1 ? Math.min(cw * 0.55, (L.offerW - cw) / (list.length - 1)) : 0;
   list.forEach((i, k) => {
     const c = el("div", "card own");
-    c.style.cssText = `left:${k * step}px;top:24px;background-image:url(${geldImg(V.denoms[i])});transform:rotate(${(k - (list.length - 1) / 2) * 2}deg);z-index:${k + 1}`;
+    c.style.cssText = `left:${k * step}px;top:${isPort() ? 22 : 24}px;background-image:url(${geldImg(V.denoms[i])});transform:rotate(${(k - (list.length - 1) / 2) * 2}deg);z-index:${k + 1}`;
     c.title = "Zurücklegen";
     c.onclick = () => { selected[i]--; render(); };
     box.appendChild(c);
@@ -629,8 +658,8 @@ function renderHand() {
   hand.innerHTML = "";
   const P = V.players[V.me];
   const p2 = V.phase === "trade";
-  const CW = p2 ? 124 : OWN.w, CH = p2 ? 186 : OWN.h;
-  const DX = 16, DY = 8, W = p2 ? 500 : 480;
+  const CW = p2 ? L.own2.w : L.own.w, CH = p2 ? L.own2.h : L.own.h;
+  const DX = L.handDX, DY = L.handDY, W = L.handW[p2 ? 1 : 0];
   const groups = [];
   shownAnimals(V.me).forEach((c, a) => { if (c) groups.push([a, c]); });
   hand.style.width = `${W}px`;
@@ -639,11 +668,12 @@ function renderHand() {
   const pickAnimals = new Set(options.map((o) => o.animal));
   const target = V.trade && V.trade.target === V.me ? V.trade.animal : null;
   const widths = groups.map(([, c]) => groupWidth(c, CW, DX));
-  const { xs, width } = packPositions(widths, W, p2 ? 22 : 14);
-  const x0 = W - width; // rechtsbündig
+  const { xs, width } = packPositions(widths, W, L.handGap[p2 ? 1 : 0]);
+  const x0 = isPort() ? (W - width) / 2 : W - width; // quer: rechtsbündig, hochkant: mittig
+  const handLeft = isPort() ? L.frame : L.w - 70 - W;
   groups.forEach(([a, c], gi) => {
     const full = c === 4;
-    const g = el("div", "hgroup" + (full ? " full" : "") + (pickAnimals.has(a) ? " pick" : "") + (target === a ? " target" : ""));
+    const g = el("div", "hgroup" + (full ? " full" : "") + (pickAnimals.has(a) ? " pick" : "") + (target === a ? " target" : "") + (p2 && openGroup === a ? " open" : ""));
     const left = x0 + xs[gi];
     const dx = groupDX(c, DX);
     g.dataset.a = a;
@@ -660,10 +690,19 @@ function renderHand() {
     g.appendChild(el("span", "name", `${V.animals[a].name} · ${V.animals[a].value}`));
     if (p2) {
       // Am Tischrand fächern die Gegner-Karten zur Mitte hin auf (erste gerade nach oben)
-      const cx = 1600 - 70 - W + left + widths[gi] / 2;   // Mitte der Gruppe in Bühnenkoordinaten
-      const fan = cx + 170 > 1530 ? "left" : cx - 170 < 70 ? "right" : "center";
+      const cx = handLeft + left + widths[gi] / 2;   // Mitte der Gruppe in Bühnenkoordinaten
+      const fan = cx + L.popReach > L.w - L.frame ? "left" : cx - L.popReach < L.frame ? "right" : "center";
       g.appendChild(popsFor(a, c, options, fan));
-    } else if (!full && c > 1) {
+      // Handy: Antippen klappt die Gegner hinter der Karte auf (statt Überfahren mit der Maus)
+      if (TOUCH) g.onclick = (e) => {
+        if (e.target.closest(".pop")) return;
+        e.stopPropagation();
+        openGroup = openGroup === a ? null : a;
+        document.querySelectorAll("#hand .hgroup.open").forEach((x) => x.classList.remove("open"));
+        if (openGroup === a) g.classList.add("open");
+        else unfocusSeat();
+      };
+    } else if (!full && c > 1 && !TOUCH) {
       // Phase 1: beim Hovern auffächern, ohne über den Tischrand zu ragen
       g.onmouseenter = () => {
         const sp = CW * 0.62;
@@ -709,9 +748,11 @@ function popsFor(a, c, options, fan = "center") {
         <div class="pc"><b>${n}</b>× ${full ? "(komplett)" : ""}</div>
         ${active ? `<div class="pa">⚔ Herausfordern</div>` : ""}`;
       pop.title = active ? `${V.players[q].name} um ${V.animals[a].name} herausfordern` : `${V.players[q].name} hat ${n}× ${V.animals[a].name}`;
-      if (active) pop.onclick = (e) => { e.stopPropagation(); unfocusSeat(); act({ kind: "challenge", target: q, animal: a }); };
-      pop.onmouseenter = () => focusSeat(q);
-      pop.onmouseleave = () => unfocusSeat();
+      if (active) pop.onclick = (e) => { e.stopPropagation(); openGroup = null; unfocusSeat(); act({ kind: "challenge", target: q, animal: a }); };
+      if (!TOUCH) {
+        pop.onmouseenter = () => focusSeat(q);
+        pop.onmouseleave = () => unfocusSeat();
+      }
     }
     box.appendChild(pop);
   });
@@ -755,8 +796,24 @@ function zeroSubmit(kind) {
 const notesSum = (c) => c.reduce((s, x, i) => s + x * V.denoms[i], 0);
 const notesCount = (c) => c.reduce((s, x) => s + x, 0);
 
-// Spielerschild sitzt immer direkt auf dem Aktionsfeld – auch wenn es beim Tippen wächst
-const placePlate = () => { $("#me-plate").style.bottom = `${58 + $("#actions").offsetHeight - 8}px`; };
+// Spielerschild sitzt immer direkt auf dem Aktionsfeld – auch wenn es beim Tippen wächst.
+// Hochkant stapelt sich alles von unten: Aktionsfeld, darüber Geld + Schild, darüber die Tierkarten.
+let openGroup = null;   // Handy: aufgeklappte eigene Tiergruppe im Kuhhandel
+function placePlate() {
+  const a = $("#actions").offsetHeight;
+  const set = (sel, v) => { $(sel).style.bottom = v === "" ? "" : `${v}px`; };
+  if (!isPort()) {
+    set("#me-plate", 58 + a - 8);
+    ["#wallet", "#hand", "#offer-pile"].forEach((s) => set(s, ""));
+    return;
+  }
+  const row = 10 + Math.max(a, 150) + 8;       // Geld und Schild
+  const hand = row + L.wal.h + 18;              // Tierkarten
+  set("#me-plate", row);
+  set("#wallet", row);
+  set("#hand", hand);
+  set("#offer-pile", hand);
+}
 new ResizeObserver(placePlate).observe($("#actions"));
 
 let keyHandler = null;
@@ -870,7 +927,7 @@ function renderActions() {
     $("#bm").onclick = () => { bidValue = Math.max(min, Math.ceil(bidValue / 10) * 10 - 10); upd(); };
     $("#bp").onclick = () => { bidValue = Math.min(V.cap, Math.floor(bidValue / 10) * 10 + 10); upd(); };
     input.oninput = () => { bidValue = parseInt(input.value.replace(/\D/g, ""), 10) || 0; upd(true); };
-    box.querySelectorAll("[data-q]").forEach((b) => (b.onclick = () => { bidValue = +b.dataset.q; upd(); input.focus(); }));
+    box.querySelectorAll("[data-q]").forEach((b) => (b.onclick = () => { bidValue = +b.dataset.q; upd(); if (!TOUCH) input.focus(); }));
     $("#bgo").onclick = submit;
     $("#bpass").onclick = myPass;
     $("#bout").onclick = () => { autoPassKey = animalKeyNow(); act({ kind: "pass" }); };
@@ -880,7 +937,8 @@ function renderActions() {
       else if (e.key === "ArrowUp") { e.preventDefault(); $("#bp").click(); }
       else if (e.key === "ArrowDown") { e.preventDefault(); $("#bm").click(); }
     };
-    if (fresh || document.activeElement === document.body) { input.focus(); input.select(); }
+    // am Handy nicht automatisch fokussieren, sonst springt die Tastatur auf
+    if (!TOUCH && (fresh || document.activeElement === document.body)) { input.focus(); input.select(); }
     return;
   }
   if (V.phase === "auction" && au.stage === "choice") {
@@ -902,7 +960,7 @@ function renderActions() {
   }
   if (V.phase === "trade" && !V.trade) {
     box.innerHTML = `<h4>Du bist dran: Wen forderst du heraus?</h4>
-      <div class="hint">Über eine deiner Karten fahren oder eine ⚔-Karte beim Gegner anklicken.</div>`;
+      <div class="hint">${TOUCH ? "Tippe auf eine deiner Karten oder auf eine ⚔-Karte beim Gegner." : "Über eine deiner Karten fahren oder eine ⚔-Karte beim Gegner anklicken."}</div>`;
     return;
   }
   const t = V.trade;
@@ -943,7 +1001,7 @@ function renderActions() {
 // Moment verschwindet), ändert nur während des Flugs seine Größe und übergibt am Ziel an die dort schon
 // liegende, bis zur Landung unsichtbare Karte.
 const FLY_MS = 620;
-const stageScale = () => $("#stage").getBoundingClientRect().width / 1600;
+const stageScale = () => $("#stage").getBoundingClientRect().width / L.w;
 
 /** Mittelpunkt, echte (unverdrehte) Größe und Drehung eines Karten-Elements in Bildschirmkoordinaten. */
 function cardGeom(elm) {
@@ -1031,7 +1089,7 @@ function planStackSwap(ev) {
   const k = speed === 2 ? 0.5 : 1;   // bei „Schnell“ halb so lang, damit sich Handel nicht überlappen
   const s = stageScale();
   const onTable = [...document.querySelectorAll("#tstack .card")].map(cardGeom);
-  const small = (r) => (r ? rectGeom(r, 40 * s, 60 * s) : null);
+  const small = (r) => (r ? rectGeom(r, L.mini.w * s, L.mini.h * s) : null);
   const money = (p) => small(moneyRect(p));
   const ts = $("#tstack").getBoundingClientRect();
   const make = (from, count, withBadge) => {
@@ -1070,7 +1128,7 @@ function planStackSwap(ev) {
   const counter = [];
   for (let i = 0; i < n && src; i++) {
     const c = make(src, ev.counter_count, i === n - 1);
-    const to = { cx: ts.right + (40 + i * 6) * s, cy: ts.top + (48 - i * 2) * s, w: 64 * s, h: 96 * s, rot: ((i * 37) % 11) - 5 };
+    const to = { cx: ts.right + (L.ts.dx + i * 6) * s, cy: ts.top + (L.ts.h / 2 - i * 2) * s, w: L.ts.w * s, h: L.ts.h * s, rot: ((i * 37) % 11) - 5 };
     move(c, to, (150 + i * 70) * k, false);
     c.from2 = to;
     counter.push(c);
@@ -1091,10 +1149,10 @@ function runFlights(flights) {
     if (f.to.center) {
       dest = document.querySelectorAll("#revealed .tcard")[f.to.idx] || null;
     } else if (f.to.stack) {
-      to = rectGeom($("#tstack").getBoundingClientRect(), 64 * stageScale(), 96 * stageScale());
+      to = rectGeom($("#tstack").getBoundingClientRect(), L.ts.w * stageScale(), L.ts.h * stageScale());
     } else if (f.to.money) {
       const r = moneyRect(f.to.p);
-      if (r) to = rectGeom(r, 40 * stageScale(), 60 * stageScale());
+      if (r) to = rectGeom(r, L.mini.w * stageScale(), L.mini.h * stageScale());
     } else {
       const g = groupEl(f.to.p, f.to.animal);
       if (g) {
@@ -1113,7 +1171,7 @@ function runFlights(flights) {
     if (dest) { to = cardGeom(dest); dest.style.visibility = "hidden"; }
     if (!to) continue;
 
-    const { cx, cy, w, h, rot } = f.money ? { ...f.from, w: 40 * stageScale(), h: 60 * stageScale(), rot: 0 } : f.from;
+    const { cx, cy, w, h, rot } = f.money ? { ...f.from, w: L.mini.w * stageScale(), h: L.mini.h * stageScale(), rot: 0 } : f.from;
     const c = el("div", "card fly" + (f.money ? " mback" : ""));
     Object.assign(c.style, { left: `${cx - w / 2}px`, top: `${cy - h / 2}px`, width: `${w}px`, height: `${h}px`, transform: `rotate(${rot}deg)` });
     if (f.img) c.style.backgroundImage = `url(${f.img})`;
@@ -1188,9 +1246,10 @@ function toast(text) {
 function placeBanner() {
   const r = $("#stage").getBoundingClientRect();
   const w = $("#banner-wrap");
+  const c = $("#center").getBoundingClientRect();
   w.style.left = `${r.left + r.width / 2}px`;
-  w.style.top = `${r.top + r.height * (380 / 900)}px`;
-  w.style.transform = `translate(-50%, -50%) scale(${r.width / 1600})`;
+  w.style.top = `${isPort() ? c.top + c.height / 2 : r.top + r.height * (380 / 900)}px`;
+  w.style.transform = `translate(-50%, -50%) scale(${r.width / L.w})`;
 }
 function banner(title, text, bad, secs = 2.1) {
   placeBanner();
@@ -1293,9 +1352,9 @@ function scorePop(p, text) {
   const anchor = p === V.me ? $("#me-plate .nameplate") : document.querySelector(`.seat[data-p="${p}"] .nameplate`);
   if (!anchor) return;
   const r = anchor.getBoundingClientRect();
-  const s = $("#stage").getBoundingClientRect().width / 1600;
+  const s = stageScale();
   const pop = el("div", "scorepop num", text);
-  Object.assign(pop.style, { left: `${r.left + r.width / 2}px`, top: `${r.top}px`, fontSize: `${40 * s}px` });
+  Object.assign(pop.style, { left: `${r.left + r.width / 2}px`, top: `${r.top}px`, fontSize: `${(isPort() ? 30 : 40) * s}px` });
   document.body.appendChild(pop);
   setTimeout(() => pop.remove(), 1900);
 }
@@ -1510,6 +1569,12 @@ document.addEventListener("keydown", (e) => {
 });
 document.addEventListener("click", (e) => {
   if (!e.target.closest("#menu, #menu-toggle")) closeMenu();
+  // Handy: Tippen daneben klappt eine geöffnete Tiergruppe wieder zu
+  if (openGroup !== null && !e.target.closest("#hand .hgroup")) {
+    openGroup = null;
+    document.querySelectorAll("#hand .hgroup.open").forEach((x) => x.classList.remove("open"));
+    unfocusSeat();
+  }
   if ($("#log").classList.contains("open") && !e.target.closest("#log, #top-buttons")) $("#log").classList.remove("open");
 });
 
@@ -1533,12 +1598,34 @@ function showResults() {
   }, 1800);
 }
 
+/** Bühne an das Fenster anpassen; hochkant (Handy) wird eine eigene, schmale Anordnung verwendet.
+ *  Gemessen wird der Layout-Viewport, damit Zoomen oder die Handy-Tastatur nichts umwirft. */
 function fit() {
-  const s = Math.min(innerWidth / 1620, innerHeight / 920);
-  $("#stage").style.transform = `translate(-50%, -50%) scale(${s})`;
+  const vw = document.documentElement.clientWidth, vh = document.documentElement.clientHeight;
+  const port = vh > vw * 1.15;
+  const next = port ? LAYOUT.port : LAYOUT.land;
+  // hochkant wächst der Tisch mit dem Seitenverhältnis des Handys
+  if (port) next.h = Math.round(Math.min(1240, Math.max(960, (next.w * vh) / vw)));
+  const changed = next !== L || $("#stage").style.height !== `${next.h}px`;
+  L = next;
+  document.body.classList.toggle("portrait", port);
+  const st = $("#stage");
+  st.style.width = `${L.w}px`;
+  st.style.height = `${L.h}px`;
+  const s = port ? Math.min(vw / L.w, vh / L.h) : Math.min(vw / 1620, vh / 920);
+  st.style.transform = `translate(-50%, -50%) scale(${s})`;
+  if (changed && V && V.phase !== "none") {
+    unfocusSeat();
+    $("#seats").dataset.players = "";   // Sitze neu anordnen
+    render();
+  }
 }
 fit();
 window.addEventListener("resize", () => { fit(); placeBanner(); });
+// Die Seite ist ein Spieltisch, kein Dokument: Zoomen per Zwei-Finger-Geste und Doppeltippen verhindern
+// (das Neuzeichnen der großen, skalierten Bühne ließ die Seite beim Zoomen weiß werden).
+["gesturestart", "gesturechange"].forEach((t) => document.addEventListener(t, (e) => e.preventDefault()));
+document.addEventListener("touchmove", (e) => { if (e.touches.length > 1) e.preventDefault(); }, { passive: false });
 api("/api/takeover", {}).then((v) => {
   if (v && v.phase !== "none" && v.phase !== "over") {
     $("#overlay").classList.remove("show");
