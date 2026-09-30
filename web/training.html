@@ -1,0 +1,272 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>KI-Training</title>
+<link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400;500;600;700&family=Lilita+One&display=swap" rel="stylesheet">
+<style>
+  :root {
+    color-scheme: light;
+    --bg: #f3ecdc; --surface-1: #fcfaf4; --border: #e2d7bd;
+    --text-primary: #2b1a0e; --text-secondary: #6b5640; --text-muted: #8f7c66;
+    --grid: #ebe3d0; --axis: #bfb196;
+    --series-1: #2a78d6; --series-2: #eb6834; --series-3: #1baf7a; --series-4: #4a3aa7;
+    --ref: #9a8d78; --good: #008300; --accent: #b8860b;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:where(:not([data-theme="light"])) {
+      color-scheme: dark;
+      --bg: #141210; --surface-1: #1d1a17; --border: #332d26;
+      --text-primary: #f7efdc; --text-secondary: #c3b8a4; --text-muted: #978b78;
+      --grid: #2a2520; --axis: #4d443a;
+      --series-1: #3987e5; --series-2: #d95926; --series-3: #199e70; --series-4: #9085e9;
+      --ref: #8a7f6e; --good: #3fb950; --accent: #f5c542;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: "Fredoka", system-ui, sans-serif; background: var(--bg); color: var(--text-primary); }
+  main { max-width: 1180px; margin: 0 auto; padding: 22px 16px 60px; }
+  header { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+  h1 { font-family: "Lilita One"; font-weight: 400; font-size: 34px; margin: 0; }
+  .status { font-size: 14px; color: var(--text-secondary); display: flex; align-items: center; gap: 8px; }
+  .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--text-muted); }
+  .dot.on { background: var(--good); box-shadow: 0 0 0 4px color-mix(in srgb, var(--good) 25%, transparent); animation: pulse 1.6s infinite; }
+  @keyframes pulse { 50% { box-shadow: 0 0 0 7px color-mix(in srgb, var(--good) 0%, transparent); } }
+  a { color: var(--accent); }
+  .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px; margin: 18px 0; }
+  .tile { background: var(--surface-1); border: 1px solid var(--border); border-radius: 14px; padding: 12px 16px; }
+  .tile .k { font-size: 13px; color: var(--text-secondary); }
+  .tile .v { font-family: "Lilita One"; font-size: 32px; line-height: 1.15; margin-top: 2px; }
+  .tile .s { font-size: 12.5px; color: var(--text-muted); }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  .grid3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin-top: 14px; }
+  @media (max-width: 860px) { .grid2, .grid3 { grid-template-columns: 1fr; } }
+  .card { background: var(--surface-1); border: 1px solid var(--border); border-radius: 14px; padding: 14px 16px 10px; position: relative; }
+  .card h2 { font-size: 16px; font-weight: 600; margin: 0; }
+  .card p.sub { margin: 2px 0 8px; font-size: 13px; color: var(--text-secondary); }
+  .legend { display: flex; gap: 14px; flex-wrap: wrap; font-size: 12.5px; color: var(--text-secondary); margin-bottom: 4px; }
+  .legend i { display: inline-block; width: 14px; height: 2px; vertical-align: middle; margin-right: 5px; border-radius: 2px; }
+  .legend i.dash { background: repeating-linear-gradient(90deg, var(--ref) 0 4px, transparent 4px 7px) !important; }
+  svg { display: block; width: 100%; overflow: visible; }
+  svg text { font-family: "Fredoka"; font-size: 11px; fill: var(--text-muted); }
+  .tip {
+    position: absolute; pointer-events: none; background: var(--surface-1); border: 1px solid var(--border);
+    border-radius: 10px; padding: 7px 10px; font-size: 12.5px; box-shadow: 0 6px 18px rgba(0,0,0,.15); display: none; white-space: nowrap; z-index: 5;
+  }
+  .tip b { font-weight: 600; }
+  .tip .row { display: flex; align-items: center; gap: 6px; }
+  .tip .sw { width: 9px; height: 9px; border-radius: 50%; }
+  details { margin-top: 18px; }
+  summary { cursor: pointer; font-weight: 600; }
+  table { border-collapse: collapse; width: 100%; font-size: 13px; margin-top: 8px; }
+  th, td { padding: 5px 8px; border-bottom: 1px solid var(--border); text-align: right; }
+  th:first-child, td:first-child { text-align: left; }
+  .explain { font-size: 13.5px; color: var(--text-secondary); line-height: 1.5; margin-top: 18px; }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>KI-Training</h1>
+    <div class="status"><span class="dot" id="dot"></span><span id="status">lädt…</span> · <a href="/">zum Spiel</a></div>
+  </header>
+
+  <div class="tiles" id="tiles"></div>
+
+  <div class="grid2">
+    <div class="card">
+      <h2>Siegquote gegen die einfachen Bots</h2>
+      <p class="sub">1 KI gegen 2–4 Heuristik-Bots, getrennt nach Spielerzahl</p>
+      <div class="legend" id="lg1"></div>
+      <div id="c1"></div>
+    </div>
+    <div class="card">
+      <h2>Siegquote gegen die eigene ältere Version</h2>
+      <p class="sub">1 aktuelle KI gegen Kopien ihrer Version von vor ~50 Iterationen</p>
+      <div class="legend" id="lg2"></div>
+      <div id="c2"></div>
+    </div>
+  </div>
+  <div class="grid3">
+    <div class="card"><h2>Entropie</h2><p class="sub">Wie zufällig die KI noch spielt (sinkt = entschlossener)</p><div id="c3"></div></div>
+    <div class="card"><h2>Value-Fehler</h2><p class="sub">Wie gut sie ihre Siegchance einschätzt (kleiner = besser)</p><div id="c4"></div></div>
+    <div class="card"><h2>Tempo</h2><p class="sub">Entscheidungen pro Sekunde im Training</p><div id="c5"></div></div>
+  </div>
+
+  <details>
+    <summary>Tabelle der letzten Auswertungen</summary>
+    <div id="table"></div>
+  </details>
+
+  <p class="explain">
+    <b>Lesehilfe:</b> Die gestrichelte Linie ist die Siegquote bei reinem Zufall (bei 3–5 Spielern im Schnitt ~26 %).
+    Gegen die einfachen Bots flacht die Kurve irgendwann ab – dann zeigt die rechte Kurve, ob die KI weiter besser wird:
+    Liegt sie deutlich über der Zufallslinie, schlägt die aktuelle Version ihre ältere Ausgabe. Die Seite aktualisiert sich alle 15 Sekunden.
+  </p>
+</main>
+
+<script>
+"use strict";
+const $ = (s) => document.querySelector(s);
+const css = (v) => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+const NS = "http://www.w3.org/2000/svg";
+const RANDOM = (1 / 3 + 1 / 4 + 1 / 5) / 3;
+
+function parseByN(s) {
+  const out = {};
+  (s || "").split(" ").filter(Boolean).forEach((p) => { const [n, v] = p.split(":"); out[n] = +v; });
+  return out;
+}
+const pct = (v) => `${Math.round(v * 100)} %`;
+
+/** Linienchart mit Fadenkreuz-Tooltip. series: [{name, color, points:[[x,y]]}] */
+function lineChart(host, series, opt = {}) {
+  host.innerHTML = "";
+  const W = host.clientWidth || 500, H = opt.height || 240;
+  const m = { l: 42, r: 12, t: 10, b: 26 };
+  const all = series.flatMap((s) => s.points);
+  if (!all.length) { host.innerHTML = `<p class="sub">Noch keine Daten.</p>`; return; }
+  const xs = all.map((p) => p[0]);
+  const x0 = Math.min(...xs), x1 = Math.max(...xs, x0 + 1);
+  let y0 = opt.yMin ?? Math.min(...all.map((p) => p[1]));
+  let y1 = opt.yMax ?? Math.max(...all.map((p) => p[1]));
+  if (y1 === y0) y1 = y0 + 1;
+  const X = (x) => m.l + ((x - x0) / (x1 - x0)) * (W - m.l - m.r);
+  const Y = (y) => H - m.b - ((y - y0) / (y1 - y0)) * (H - m.t - m.b);
+  const svg = document.createElementNS(NS, "svg");
+  svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
+  svg.setAttribute("height", H);
+  const add = (tag, attrs, parent = svg) => {
+    const e = document.createElementNS(NS, tag);
+    for (const k in attrs) e.setAttribute(k, attrs[k]);
+    parent.appendChild(e);
+    return e;
+  };
+  // Gitter + Achsen
+  const ticks = 4;
+  for (let i = 0; i <= ticks; i++) {
+    const v = y0 + ((y1 - y0) * i) / ticks;
+    add("line", { x1: m.l, x2: W - m.r, y1: Y(v), y2: Y(v), stroke: css("--grid"), "stroke-width": 1 });
+    add("text", { x: m.l - 6, y: Y(v) + 4, "text-anchor": "end" }).textContent = opt.fmt ? opt.fmt(v) : +v.toFixed(3);
+  }
+  add("line", { x1: m.l, x2: W - m.r, y1: H - m.b, y2: H - m.b, stroke: css("--axis") });
+  const xt = 5;
+  for (let i = 0; i <= xt; i++) {
+    const v = Math.round(x0 + ((x1 - x0) * i) / xt);
+    add("text", { x: X(v), y: H - 8, "text-anchor": "middle" }).textContent = v;
+  }
+  if (opt.ref !== undefined) {
+    add("line", { x1: m.l, x2: W - m.r, y1: Y(opt.ref), y2: Y(opt.ref), stroke: css("--ref"), "stroke-width": 1.5, "stroke-dasharray": "5 4" });
+  }
+  for (const s of series) {
+    if (!s.points.length) continue;
+    const d = s.points.map((p, i) => `${i ? "L" : "M"}${X(p[0]).toFixed(1)},${Y(p[1]).toFixed(1)}`).join("");
+    add("path", { d, fill: "none", stroke: s.color, "stroke-width": 2, "stroke-linejoin": "round", "stroke-linecap": "round" });
+    const last = s.points[s.points.length - 1];
+    add("circle", { cx: X(last[0]), cy: Y(last[1]), r: 4, fill: s.color, stroke: css("--surface-1"), "stroke-width": 2 });
+  }
+  // Hover
+  const cross = add("line", { y1: m.t, y2: H - m.b, stroke: css("--axis"), "stroke-width": 1, visibility: "hidden" });
+  const dots = series.map((s) => add("circle", { r: 4.5, fill: s.color, stroke: css("--surface-1"), "stroke-width": 2, visibility: "hidden" }));
+  const hit = add("rect", { x: m.l, y: m.t, width: W - m.l - m.r, height: H - m.t - m.b, fill: "transparent" });
+  const tip = document.createElement("div");
+  tip.className = "tip";
+  host.style.position = "relative";
+  host.appendChild(svg);
+  host.appendChild(tip);
+  hit.addEventListener("mousemove", (e) => {
+    const r = svg.getBoundingClientRect();
+    const px = ((e.clientX - r.left) / r.width) * W;
+    const xv = x0 + ((px - m.l) / (W - m.l - m.r)) * (x1 - x0);
+    let rows = "";
+    let cx = null;
+    series.forEach((s, i) => {
+      if (!s.points.length) { dots[i].setAttribute("visibility", "hidden"); return; }
+      let best = s.points[0];
+      for (const p of s.points) if (Math.abs(p[0] - xv) < Math.abs(best[0] - xv)) best = p;
+      cx = best[0];
+      dots[i].setAttribute("cx", X(best[0])); dots[i].setAttribute("cy", Y(best[1])); dots[i].setAttribute("visibility", "visible");
+      rows += `<div class="row"><span class="sw" style="background:${s.color}"></span>${s.name}: <b>${opt.fmt ? opt.fmt(best[1]) : best[1]}</b></div>`;
+    });
+    cross.setAttribute("x1", X(cx)); cross.setAttribute("x2", X(cx)); cross.setAttribute("visibility", "visible");
+    tip.innerHTML = `<div style="color:var(--text-muted)">Iteration ${cx}</div>${rows}`;
+    tip.style.display = "block";
+    const left = (X(cx) / W) * r.width;
+    tip.style.left = `${Math.min(left + 12, r.width - tip.offsetWidth - 4)}px`;
+    tip.style.top = "8px";
+  });
+  hit.addEventListener("mouseleave", () => {
+    tip.style.display = "none";
+    cross.setAttribute("visibility", "hidden");
+    dots.forEach((d) => d.setAttribute("visibility", "hidden"));
+  });
+}
+
+function legend(host, items) {
+  host.innerHTML = items.map((it) => `<span><i class="${it.dash ? "dash" : ""}" style="background:${it.color}"></i>${it.name}</span>`).join("");
+}
+
+function smooth(points, k = 5) {
+  return points.map((p, i) => {
+    const w = points.slice(Math.max(0, i - k + 1), i + 1);
+    return [p[0], w.reduce((s, q) => s + q[1], 0) / w.length];
+  });
+}
+
+let lastData = null;
+async function load() {
+  let data;
+  try { data = await (await fetch("/api/training")).json(); } catch (e) { $("#status").textContent = "Server nicht erreichbar"; return; }
+  lastData = data;
+  draw(data);
+}
+
+function draw(data) {
+  const rows = data.rows.map((r) => ({ ...r, iter: +r.iter }));
+  $("#dot").className = "dot" + (data.running ? " on" : "");
+  $("#status").textContent = data.running ? `Training läuft · letztes Update vor ${data.updated_s} s` : "Training gestoppt";
+  if (!rows.length) { $("#tiles").innerHTML = "<p>Noch keine Trainingsdaten.</p>"; return; }
+  const last = rows[rows.length - 1];
+  const evals = rows.filter((r) => r.eval_winrate);
+  const olds = rows.filter((r) => r.vs_old_winrate);
+  const le = evals[evals.length - 1];
+  const lo = olds[olds.length - 1];
+  const hrs = (+last.time_min) / 60;
+  const best = evals.reduce((b, r) => Math.max(b, +r.eval_winrate), 0);
+  $("#tiles").innerHTML = `
+    <div class="tile"><div class="k">Iteration</div><div class="v">${last.iter}</div><div class="s">${last.games_total ? (+last.games_total).toLocaleString("de-DE") + " Partien gespielt" : ""}</div></div>
+    <div class="tile"><div class="k">Trainingszeit</div><div class="v">${hrs >= 1 ? hrs.toFixed(1) + " h" : Math.round(+last.time_min) + " min"}</div><div class="s">${(+last.sps).toLocaleString("de-DE")} Entscheidungen/s</div></div>
+    <div class="tile"><div class="k">Gegen einfache Bots</div><div class="v">${le ? pct(+le.eval_winrate) : "–"}</div><div class="s">Bestwert ${pct(best)} · Zufall ${pct(RANDOM)}</div></div>
+    <div class="tile"><div class="k">Gegen ältere Version</div><div class="v">${lo ? pct(+lo.vs_old_winrate) : "–"}</div><div class="s">${lo ? `gegen Iteration ${lo.vs_old_iter}` : "ab Iteration ~60"}</div></div>`;
+
+  const colors = [css("--series-1"), css("--series-2"), css("--series-3")];
+  const byN = (list, col) => ["3", "4", "5"].map((n, i) => ({
+    name: `${n} Spieler`, color: colors[i],
+    points: list.filter((r) => r[col]).map((r) => [r.iter, parseByN(r[col])[n]]).filter((p) => p[1] !== undefined),
+  }));
+  const ref = { name: "Zufall (~26 %)", color: css("--ref"), dash: true };
+  const s1 = byN(evals, "eval_by_n");
+  legend($("#lg1"), [...s1, ref]);
+  lineChart($("#c1"), s1, { yMin: 0, yMax: 1, fmt: pct, ref: RANDOM });
+  const s2 = [{ name: "Gesamt", color: css("--series-4"), points: olds.map((r) => [r.iter, +r.vs_old_winrate]) }];
+  legend($("#lg2"), [...s2, ref]);
+  lineChart($("#c2"), s2, { yMin: 0, yMax: 1, fmt: pct, ref: RANDOM });
+  const one = (col, name) => [{ name, color: css("--series-1"), points: smooth(rows.filter((r) => r[col]).map((r) => [r.iter, +r[col]])) }];
+  lineChart($("#c3"), one("ent", "Entropie"), { height: 170, fmt: (v) => v.toFixed(2) });
+  lineChart($("#c4"), one("vl", "Value-Fehler"), { height: 170, fmt: (v) => v.toFixed(3) });
+  lineChart($("#c5"), one("sps", "Entscheidungen/s"), { height: 170, fmt: (v) => Math.round(v).toLocaleString("de-DE") });
+
+  const recent = evals.slice(-15).reverse();
+  $("#table").innerHTML = `<table><thead><tr><th>Iteration</th><th>Zeit</th><th>vs Bots</th><th>3 Sp.</th><th>4 Sp.</th><th>5 Sp.</th><th>vs ältere Version</th></tr></thead><tbody>
+    ${recent.map((r) => { const b = parseByN(r.eval_by_n); return `<tr><td>${r.iter}</td><td>${Math.round(+r.time_min)} min</td><td>${pct(+r.eval_winrate)}</td><td>${b[3] !== undefined ? pct(b[3]) : "–"}</td><td>${b[4] !== undefined ? pct(b[4]) : "–"}</td><td>${b[5] !== undefined ? pct(b[5]) : "–"}</td><td>${r.vs_old_winrate ? pct(+r.vs_old_winrate) + ` (It. ${r.vs_old_iter})` : "–"}</td></tr>`; }).join("")}
+  </tbody></table>`;
+}
+
+load();
+setInterval(load, 15000);
+let rt;
+window.addEventListener("resize", () => { clearTimeout(rt); rt = setTimeout(() => lastData && draw(lastData), 150); });
+</script>
+</body>
+</html>

@@ -5,43 +5,54 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Kuhhandel</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400;500;600;700&family=Patrick+Hand&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400;500;600;700&family=Lilita+One&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
-<div id="table">
-  <div id="felt"></div>
-  <div id="stage">
-
-  <div id="opponents"></div>
+<div id="stage">
+  <div id="seats"></div>
 
   <div id="center">
-    <div id="deck-area">
-      <div id="deck" class="card back"><span id="deck-count"></span></div>
+    <div id="pile-area">
+      <div id="deck"></div>
       <div id="revealed"></div>
+      <span id="deck-count"></span>
+      <div id="tstack" class="tstack"></div>
     </div>
-    <div id="hud"></div>
+    <div id="plaque" class="paper"></div>
   </div>
 
-  <div id="me">
-    <div id="me-plate"></div>
-    <div id="wallet-wrap">
-      <div id="wallet"></div>
-      <div id="wallet-help"></div>
-    </div>
-    <div id="actions"></div>
-    <div id="hand"></div>
-  </div>
-
-  <button id="log-toggle" title="Spielverlauf">📜</button>
-  <aside id="log"><h3>Spielverlauf</h3><ol id="log-list"></ol></aside>
+  <div id="offer-pile"></div>
+  <div id="wallet"></div>
+  <div id="actions" class="paper"></div>
+  <div id="me-plate"></div>
+  <div id="hand"></div>
   <div id="toasts"></div>
+  <div id="banner"></div>
+
+  <div id="top-buttons">
+    <button id="menu-toggle" class="round" title="Einstellungen">⚙️</button>
+    <div id="menu" class="paper">
+      <div class="m-lbl">Tempo der Gegner</div>
+      <div class="seg" id="m-speed"><button data-s="0">🐢 Langsam</button><button data-s="1">🐇 Normal</button><button data-s="2">⚡ Schnell</button></div>
+      <button class="m-item" id="m-log">📜 Spielverlauf</button>
+      <button class="m-item" id="m-skip">⏭ Versteigerung überspringen</button>
+      <a class="m-item" href="training.html" target="_blank">📈 KI-Training live</a>
+      <button class="m-item danger" id="m-new">🔄 Neues Spiel</button>
+    </div>
   </div>
+  <aside id="log">
+    <header><h3>Spielverlauf</h3><button id="log-close" class="round small" title="Schließen (Esc)">✕</button></header>
+    <ol id="log-list"></ol>
+  </aside>
 </div>
 
 <div id="overlay" class="show">
   <div class="panel" id="start-panel">
-    <h1>Kuh<span>handel</span></h1>
+    <div class="logo-cards">
+      <img src="assets/web/tier_kuh.webp" alt=""><img src="assets/web/tier_esel.webp" alt=""><img src="assets/web/tier_pferd.webp" alt="">
+    </div>
+    <h1>Kuhhandel</h1>
     <p class="sub">Hausregel-Edition</p>
     <label>Dein Name <input id="in-name" value="Du" maxlength="14"></label>
     <label>Spieler

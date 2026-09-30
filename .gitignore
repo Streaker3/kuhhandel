@@ -3,3 +3,8 @@ __pycache__/
 .venv/
 runs/
 checkpoints/
+web/assets/cards/
+web/assets/money/
+web/assets/*.png
+web/assets/.DS_Store
+.DS_Store

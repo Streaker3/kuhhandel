@@ -69,9 +69,10 @@ def rollout_worker(args):
     heur = HeuristicBot(seed=seed)
 
     def new_game():
-        if mode == "eval":
+        if mode in ("eval", "evalvs"):
+            # eval: 1× KI gegen Heuristik-Bots; evalvs: 1× KI gegen eine ältere Version (league[0])
             n = rng.choice((3, 4, 5))
-            seats = ["heur"] * n
+            seats = ["heur" if mode == "eval" else ("league", 0)] * n
             seats[rng.randrange(n)] = "cur"
         else:
             n = rng.choices(PLAYER_COUNTS, PLAYER_WEIGHTS)[0]
@@ -98,7 +99,7 @@ def rollout_worker(args):
             stats["by_n"][g.n][0] += r
             stats["by_n"][g.n][1] += 1
             tr = slot["traj"][p]
-            if mode == "eval" or not tr:
+            if mode != "train" or not tr:
                 continue
             vals = np.array([t[4] for t in tr] + [0.0], dtype=np.float32)
             T = len(tr)
@@ -200,16 +201,19 @@ def ppo_update(net, opt, data, args):
     return {k: v / nb for k, v in info.items()}
 
 
-def save(net, opt, it, league, path):
+def save(net, opt, it, league, path, extra=None):
     torch.save({"model": net.state_dict(), "opt": opt.state_dict(), "iter": it,
                 "obs_dim": obs_size(), "hidden": net.v.in_features,
-                "league": league}, path)
+                "league": league, **(extra or {})}, path)
 
 
-def evaluate(pool, net, args, games):
+def evaluate(pool, net, args, games, opponent=None):
+    """Siegquote der KI (1 Sitz) gegen Heuristik-Bots oder gegen eine ältere Version."""
     state = {k: v.clone() for k, v in net.state_dict().items()}
     per = max(1, games // args.workers)
-    jobs = [(state, [], args.hidden, per, random.randrange(1 << 30), 1.0, 0.95, "eval", 0, 0)
+    league = [opponent] if opponent is not None else []
+    mode = "evalvs" if opponent is not None else "eval"
+    jobs = [(state, league, args.hidden, per, random.randrange(1 << 30), 1.0, 0.95, mode, 0, 0)
             for _ in range(args.workers)]
     wins = seats = 0
     by_n = defaultdict(lambda: [0, 0])
@@ -248,24 +252,38 @@ def main():
     net = PolicyNet(hidden=args.hidden)
     opt = torch.optim.Adam(net.parameters(), lr=args.lr, eps=1e-5)
     start_it, league = 0, []
+    elapsed0, games0, best = 0.0, 0, -1.0
     if args.resume and (CKPT / "latest.pt").exists():
         ck = torch.load(CKPT / "latest.pt", weights_only=False)
         net.load_state_dict(ck["model"]); opt.load_state_dict(ck["opt"])
         start_it, league = ck["iter"], ck.get("league", [])
+        elapsed0, games0 = ck.get("elapsed_min", 0.0), ck.get("games_total", 0)
+        best = ck.get("best", -1.0)
         print(f"Fortsetzen ab Iteration {start_it}, Liga: {len(league)} Versionen")
 
+    header = ["iter", "time_min", "games_total", "steps", "selfplay_winrate", "eval_winrate", "eval_by_n",
+              "vs_old_winrate", "vs_old_iter", "vs_old_by_n", "pg", "vl", "ent", "kl", "clipfrac", "sps"]
     log_path = RUNS / "log.csv"
-    new_log = not log_path.exists() or not args.resume
-    logf = open(log_path, "w" if new_log else "a", newline="")
-    log = csv.writer(logf)
-    if new_log:
-        log.writerow(["iter", "time_min", "steps", "selfplay_winrate", "eval_winrate", "eval_by_n",
-                      "pg", "vl", "ent", "kl", "clipfrac", "sps"])
+    old_rows = []
+    if args.resume and log_path.exists():
+        with open(log_path, newline="") as f:
+            old_rows = list(csv.DictReader(f))
+    logf = open(log_path, "w", newline="")
+    log = csv.DictWriter(logf, fieldnames=header, extrasaction="ignore", restval="")
+    log.writeheader()
+    if start_it and not games0:
+        games0 = start_it * args.games  # Schätzung für ältere Checkpoints
+    if old_rows and not elapsed0:
+        elapsed0 = float(old_rows[-1]["time_min"] or 0)
+    for r in old_rows:  # alte Zeilen übernehmen (fehlende Spalten bleiben leer)
+        if int(r["iter"]) <= start_it:
+            log.writerow(r)
+    logf.flush()
+    snap_iters = sorted(int(p.stem.split("_")[1]) for p in CKPT.glob("snap_*.pt"))
 
     ctx = mp.get_context("spawn")
     pool = ctx.Pool(args.workers)
     t0 = time.time()
-    best = -1.0
     try:
         for it in range(start_it + 1, start_it + args.iters + 1):
             if args.hours and time.time() - t0 > args.hours * 3600:
@@ -291,26 +309,42 @@ def main():
             steps = len(batch["act"])
             sps = steps / (time.time() - ti)
 
-            eval_wr, eval_by_n = "", ""
+            games_total = games0 + sum(s["games"] for _, s in results)
+            games0 = games_total
+            row = {}
             if it % args.eval_every == 0:
                 wr, by_n = evaluate(pool, net, args, args.eval_games)
-                eval_wr = f"{wr:.3f}"
-                eval_by_n = " ".join(f"{n}:{v:.2f}" for n, v in by_n.items())
+                row["eval_winrate"] = f"{wr:.3f}"
+                row["eval_by_n"] = " ".join(f"{n}:{v:.2f}" for n, v in by_n.items())
+                # gegen die eigene Version von vor ~50 Iterationen (Fortschritt trotz Sättigung gegen Heuristik)
+                old = [s for s in snap_iters if s <= it - 50]
+                if old:
+                    ck_old = torch.load(CKPT / f"snap_{old[-1]:05d}.pt", weights_only=False)
+                    wr_o, by_o = evaluate(pool, net, args, args.eval_games, opponent=ck_old["model"])
+                    row["vs_old_winrate"] = f"{wr_o:.3f}"
+                    row["vs_old_iter"] = old[-1]
+                    row["vs_old_by_n"] = " ".join(f"{n}:{v:.2f}" for n, v in by_o.items())
                 if wr > best:
                     best = wr
-                    save(net, opt, it, league, CKPT / "best.pt")
+                    save(net, opt, it, league, CKPT / "best.pt", {"best": best})
             if it % args.snapshot_every == 0:
                 league.append({k: v.clone() for k, v in net.state_dict().items()})
                 league = league[-args.league_size:]
                 torch.save({"model": net.state_dict(), "obs_dim": obs_size(), "hidden": args.hidden, "iter": it},
                            CKPT / f"snap_{it:05d}.pt")
-            save(net, opt, it, league, CKPT / "latest.pt")
+                snap_iters.append(it)
+            mins = elapsed0 + (time.time() - t0) / 60
+            save(net, opt, it, league, CKPT / "latest.pt",
+                 {"elapsed_min": mins, "games_total": games_total, "best": best})
 
-            mins = (time.time() - t0) / 60
-            log.writerow([it, f"{mins:.1f}", steps, f"{wins / max(1, seats):.3f}", eval_wr, eval_by_n,
-                          f"{info['pg']:.4f}", f"{info['vl']:.4f}", f"{info['ent']:.3f}",
-                          f"{info['kl']:.4f}", f"{info['clipfrac']:.3f}", f"{sps:.0f}"])
+            row.update({"iter": it, "time_min": f"{mins:.1f}", "games_total": games_total, "steps": steps,
+                        "selfplay_winrate": f"{wins / max(1, seats):.3f}", "pg": f"{info['pg']:.4f}",
+                        "vl": f"{info['vl']:.4f}", "ent": f"{info['ent']:.3f}", "kl": f"{info['kl']:.4f}",
+                        "clipfrac": f"{info['clipfrac']:.3f}", "sps": f"{sps:.0f}"})
+            log.writerow(row)
             logf.flush()
+            eval_wr = row.get("eval_winrate", "")
+            eval_by_n = row.get("eval_by_n", "")
             msg = (f"it {it:5d} | {mins:6.1f} min | steps {steps:6d} | roll {t_roll:4.1f}s | "
                    f"ent {info['ent']:.2f} vl {info['vl']:.3f} kl {info['kl']:.4f}")
             if eval_wr:

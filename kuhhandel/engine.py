@@ -392,7 +392,8 @@ class Game:
                       "stage": "offer", "offer": None, "counter": None,
                       "cash_before": (self.cash_value(p), self.cash_value(target))}
         msg = f"{self.names[p]} fordert {self.names[target]} heraus: {k}× {NAMES[animal]}."
-        self._log(None, {p: msg, target: msg}, kind="challenge")
+        self._log(None, {p: msg, target: msg}, kind="challenge",
+                  challenger=p, target=target, animal=animal, k=k)
 
     def _do_offer(self, notes):
         p = self.to_act
@@ -485,5 +486,8 @@ class Game:
         for i in range(start, len(self.events)):
             txt = self.event_text(self.events[i], viewer)
             if txt is not None:
-                out.append({"i": i, "text": txt, "kind": self.events[i].get("kind")})
+                ev = self.events[i]
+                d = {k: v for k, v in ev.items() if k not in ("pub", "priv", "notes")}
+                d.update(i=i, text=txt)
+                out.append(d)
         return out

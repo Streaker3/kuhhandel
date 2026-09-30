@@ -50,6 +50,20 @@ def new_game(players: int, name: str, opponents: str = "ai", seed=None):
     state["bots"] = bots
 
 
+def training_data():
+    """Trainingsverlauf aus runs/log.csv für die Statistik-Seite."""
+    import csv
+    import time
+    log = ROOT / "runs" / "log.csv"
+    if not log.exists():
+        return {"rows": [], "running": False}
+    with open(log, newline="") as f:
+        rows = list(csv.DictReader(f))
+    age = time.time() - log.stat().st_mtime
+    ckpts = sorted(p.name for p in (ROOT / "checkpoints").glob("*.pt"))
+    return {"rows": rows, "running": age < 180, "updated_s": round(age), "checkpoints": len(ckpts)}
+
+
 def parse_action(a):
     kind = a["kind"]
     if kind == "bid":
@@ -91,6 +105,8 @@ class Handler(BaseHTTPRequestHandler):
             ck = ai_checkpoint()
             return self._json({"ai_available": make_ai_bot() is not None,
                                "checkpoint": ck.name if ck else None})
+        if path == "/api/training":
+            return self._json(training_data())
         if path == "/api/state":
             q = self.path.split("since=")
             since = int(q[1]) if len(q) > 1 else 0
@@ -127,6 +143,13 @@ class Handler(BaseHTTPRequestHandler):
                     if g.to_act != HUMAN:
                         return self._json({"error": "Du bist nicht dran"}, 400)
                     g.step(parse_action(body["action"]))
+                    return self._json(self._view(since))
+                if path == "/api/skip_auction":
+                    # Test-Hilfe: Versteigerung automatisch zu Ende spielen (eigene Züge macht ein Heuristik-Bot)
+                    stand_in = HeuristicBot()
+                    while g.phase == "auction":
+                        bot = stand_in if g.to_act == HUMAN else state["bots"][g.to_act]
+                        g.step(bot.act(g))
                     return self._json(self._view(since))
                 if path == "/api/bot_step":
                     if g.to_act is not None and g.to_act != HUMAN:

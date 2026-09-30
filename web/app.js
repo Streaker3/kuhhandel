@@ -4,8 +4,12 @@ const EMOJI = {
   pferd: "🐴", kuh: "🐄", schwein: "🐖", esel: "🫏", ziege: "🐐",
   schaf: "🐑", hund: "🐕", katze: "🐈", gans: "🪿", hahn: "🐓",
 };
-const AVATARS = ["🧑‍🌾", "👵", "🧔", "👩‍🦰", "👴"];
-const BILL_EMB = { 0: "🥚", 10: "🌾", 50: "🥕", 100: "🧀", 200: "🍎", 500: "🏆" };
+// Avatar pro Sitz (Ausschnitt einer Tierkarte): Ich, Berta, Konrad, Hilde, Gustav
+const AVATAR_ANIMAL = ["hahn", "kuh", "esel", "schwein", "ziege"];
+const A = "assets/web/";
+const tierImg = (key) => `${A}tier_${key}.webp`;
+const geldImg = (d) => `${A}geld_${d}.webp`;
+const OWN = { w: 110, h: 165 }, OPP = { w: 84, h: 126 };
 
 const $ = (s) => document.querySelector(s);
 const el = (tag, cls, html) => {
@@ -15,37 +19,22 @@ const el = (tag, cls, html) => {
   return e;
 };
 
+// Tempo der Gegner: [Label, Pause normal, Pause nach wichtigen Ereignissen]
+const SPEEDS = [["🐢 Langsam", 1400, 2800], ["🐇 Normal", 850, 2100], ["⚡ Schnell", 350, 1200]];
 const FAST = location.search.includes("fast");
-let V = null;            // aktuelle Ansicht vom Server
-let since = 0;           // Anzahl bereits gesehener Ereignisse
-let selected = new Set(); // ausgewählte Schein-Indizes (Kuhhandel)
-let selectMode = null;   // "offer" | "counter" | null
+let speed = 1;
+try { speed = +(localStorage.getItem("kh-speed") ?? 1) % SPEEDS.length; } catch (e) { /* egal */ }
+
+let V = null;              // aktuelle Ansicht vom Server
+let since = 0;             // Anzahl bereits gesehener Ereignisse
+let selected = [0, 0, 0, 0, 0, 0]; // für Kuhhandel ausgewählte Geldkarten je Stückelung
+let selectMode = null;     // "offer" | "counter" | null
 let bidValue = 0;
 let botTimer = null;
 let busy = false;
-const imgOk = {};
-const moneyImg = {};  // Stückelung -> true, wenn assets/money/<d>.png existiert        // key -> true, wenn assets/cards/<key>.png existiert
-
-// --------------------------------------------------------------- Assets
-function probe(src) {
-  return new Promise((res) => {
-    const i = new Image();
-    i.onload = () => res(true);
-    i.onerror = () => res(false);
-    i.src = src;
-  });
-}
-async function loadAssets() {
-  await Promise.all(Object.keys(EMOJI).map(async (k) => {
-    imgOk[k] = await probe(`assets/cards/${k}.png`);
-  }));
-  await Promise.all([0, 10, 50, 100, 200, 500].map(async (d) => {
-    moneyImg[d] = await probe(`assets/money/${d}.png`);
-  }));
-  if (await probe("assets/card_back.png")) document.body.classList.add("img-back");
-  if (await probe("assets/money_back.png")) document.body.classList.add("img-mback");
-  if (await probe("assets/table.png")) $("#felt").classList.add("img");
-}
+let bidHistory = [];       // Gebote der laufenden Versteigerung
+let lastBubble = {};       // p -> zuletzt angezeigte Sprechblase (für Animation nur bei Änderung)
+let lastAmount = null;
 
 // --------------------------------------------------------------- API
 async function api(path, body) {
@@ -61,21 +50,23 @@ async function api(path, body) {
 
 function accept(view) {
   if (!view) return;
+  const prev = V;
+  const events = view.events.filter((e) => e.i >= since);
+  const flights = prev && events.length < 25 ? planFlights(prev, events) : [];
   V = view;
-  for (const ev of view.events) {
-    if (ev.i < since) continue;
-    logEvent(ev);
-  }
+  for (const ev of events) handleEvent(ev);
   since = view.event_count;
   render();
-  scheduleBot(view.events);
+  runFlights(flights);
+  scheduleBot(events);
 }
 
 function scheduleBot(events) {
   clearTimeout(botTimer);
   if (!V || !V.bot_turn) return;
-  const pause = events.some((e) => ["sold", "bought", "free", "bust", "trade_result", "donkey", "phase"].includes(e.kind));
-  const delay = FAST ? 15 : pause ? 1700 : 750;
+  const big = events.some((e) => ["sold", "bought", "free", "bust", "trade_result", "donkey", "phase"].includes(e.kind));
+  const [, normal, pause] = SPEEDS[speed];
+  const delay = FAST ? 15 : big ? pause : normal;
   botTimer = setTimeout(async () => accept(await api("/api/bot_step", {})), delay);
 }
 
@@ -83,290 +74,445 @@ async function act(action) {
   if (busy) return;
   busy = true;
   selectMode = null;
-  selected.clear();
+  selected = [0, 0, 0, 0, 0, 0];
   const v = await api("/api/act", { action });
   busy = false;
   if (v) accept(v); else render();
 }
 
-// --------------------------------------------------------------- Karten
-function cardHTML(a, extra = "") {
-  const A = V.animals[a];
-  if (imgOk[A.key]) {
-    return `<div class="card has-img a-${A.key} ${extra}"><div class="art"><img src="assets/cards/${A.key}.png" alt="${A.name}"></div></div>`;
-  }
-  return `<div class="card a-${A.key} ${extra}">
-    <span class="val">${A.value}</span><div class="art">${EMOJI[A.key]}</div></div>`;
-}
-function miniHTML(a, cnt, extra = "") {
-  const A = V.animals[a];
-  const art = imgOk[A.key] ? `<img src="assets/cards/${A.key}.png" alt="">` : EMOJI[A.key];
-  return `<div class="mini ${cnt === 4 ? "full" : ""} ${extra}" title="${cnt}× ${A.name} (Quartett ${A.value})" data-a="${a}">${art}<span class="cnt">${cnt}</span></div>`;
-}
+// --------------------------------------------------------------- Bausteine
+const nameOf = (p) => (p === V.me ? "Du" : V.players[p].name);
+const animalKey = (a) => V.animals[a].key;
 
-// --------------------------------------------------------------- Render
-function render() {
-  if (!V || V.phase === "none") return;
-  renderOpponents();
-  renderCenter();
-  renderMe();
-  renderActions();
-  if (V.phase === "over") showResults();
+function avatarHTML(p) {
+  return `<div class="avatar" style="background-image:url(${tierImg(AVATAR_ANIMAL[p % AVATAR_ANIMAL.length])})"></div>`;
 }
-
-function badgesFor(p) {
-  const out = [];
-  const au = V.auction;
-  if (au && V.phase === "auction") {
-    if (au.auctioneer === p) out.push(`<span class="tag auct">🔨 Versteigerer</span>`);
-    if (au.high === p) out.push(`<span class="tag high">👑 Höchstgebot</span>`);
-    if (au.excluded.includes(p)) out.push(`<span class="tag out">ausgeschlossen</span>`);
-  }
-  return out.join("");
-}
-
-function bubbleFor(p) {
-  const au = V.auction;
-  if (!au || au.stage !== "bidding" && au.stage !== "choice") return "";
-  const last = au.last[String(p)];
-  if (last === undefined) return "";
-  if (last === "pass") return `<div class="bubble pass">Passe</div>`;
-  return `<div class="bubble ${au.high === p ? "high" : ""}">${last}</div>`;
-}
-
-function renderOpponents() {
-  const box = $("#opponents");
-  box.innerHTML = "";
-  const pickable = new Set();
-  if (V.options) for (const o of V.options) pickable.add(`${o.target}:${o.animal}`);
-
-  for (let i = 1; i < V.n; i++) {
-    const p = (V.me + i) % V.n;
-    const P = V.players[p];
-    const seat = el("div", "seat" + (V.to_act === p ? " active" : ""));
-    const sc = scoreOf(P.animals);
-    seat.innerHTML = `
-      <div class="plate">
-        <div class="avatar">${AVATARS[p % AVATARS.length]}</div>
-        <div><div class="nm">${P.name}</div>
-        <div class="sub">${P.quartets} Quartett${P.quartets === 1 ? "" : "e"} · ${sc} Pkt${P.revealed !== undefined ? ` · 💰 ${P.revealed} (offen)` : ""}</div></div>
-      </div>
-      ${bubbleFor(p)}
-      <div class="badges">${badgesFor(p)}</div>
-      <div class="seat-body">
-        <div class="mini-animals"></div>
-        <div><div class="pile">${pileHTML(P.stack)}</div><div class="pile-cap">Geld</div></div>
-      </div>`;
-    const mini = seat.querySelector(".mini-animals");
-    P.animals.forEach((c, a) => {
-      if (!c) return;
-      const pick = pickable.has(`${p}:${a}`);
-      const wrap = el("div", null, miniHTML(a, c, pick ? "pick" : ""));
-      const m = wrap.firstElementChild;
-      if (pick) m.onclick = () => act({ kind: "challenge", target: p, animal: a });
-      mini.appendChild(m);
-    });
-    if (!P.animals.some((c) => c)) mini.innerHTML = `<span style="opacity:.5;font-size:12px">noch keine Tiere</span>`;
-    box.appendChild(seat);
-  }
-}
-
-function pileHTML(size) {
-  let s = "";
-  for (let i = 0; i < size * 2; i++) {
-    const r = ((i * 37) % 13) - 6;
-    s += `<div class="b" style="bottom:${i * 3}px;left:${(i * 7) % 6}px;transform:rotate(${r}deg)"></div>`;
-  }
-  return s;
-}
-
 function scoreOf(animals) {
   const full = animals.map((c, a) => (c === 4 ? V.animals[a].value : 0)).filter(Boolean);
   return full.reduce((x, y) => x + y, 0) * full.length;
 }
+function badgesHTML(p) {
+  const au = V.auction;
+  if (!au || V.phase !== "auction") return "";
+  let s = "";
+  if (au.auctioneer === p) s += `<span class="badge auct" title="Versteigerer">🔨</span>`;
+  if (au.high === p) s += `<span class="badge crown" title="Höchstgebot">👑</span>`;
+  else if (au.excluded.includes(p)) s += `<span class="badge out" title="Für diese Karte ausgeschlossen">🚫</span>`;
+  return s;
+}
+function bubbleHTML(p) {
+  const au = V.auction;
+  const last = au ? au.last[String(p)] : undefined;
+  const key = last === undefined ? "" : `${au.card}:${last}`;
+  const changed = lastBubble[p] !== key;
+  lastBubble[p] = key;
+  if (last === undefined) return "";
+  const pop = changed ? " pop" : "";
+  if (last === "pass") return `<div class="bubble pass${pop}">passe</div>`;
+  return `<div class="bubble${pop} ${au.high === p ? "high" : "old"}">${last}</div>`;
+}
+
+/** Positionen für Gruppen unterschiedlicher Breite; wird bei Platzmangel zusammengeschoben. */
+function packPositions(widths, avail, gap) {
+  const xs = [];
+  let x = 0;
+  for (const w of widths) { xs.push(x); x += w + gap; }
+  const total = x - gap;
+  if (widths.length > 1 && total > avail) {
+    const last = xs[xs.length - 1];
+    const f = (avail - widths[widths.length - 1]) / last;
+    for (let i = 0; i < xs.length; i++) xs[i] *= f;
+  }
+  return { xs, width: Math.min(total, avail) };
+}
+
+// Sitzpositionen der Gegner [Mitte x, Oberkante y, Breite] je Anzahl Gegner
+const SEAT_POS = {
+  1: [[800, 62, 600, 1]],
+  2: [[590, 62, 400, 1], [1010, 62, 400, 1]],
+  3: [[225, 120, 330, 2], [800, 62, 460, 1], [1375, 120, 330, 2]],
+  4: [[225, 120, 330, 2], [590, 62, 400, 1], [1010, 62, 400, 1], [1375, 120, 330, 2]],
+};
+const MONEY_FAN = [0, 2, 3, 5, 7, 9]; // grobe Stapelgröße -> gezeigte Rückseiten (nicht exakt)
+const ROW_STEP = 100;                 // vertikaler Abstand zweier Kartenreihen bei seitlichen Gegnern
+
+/** Breite einer Tiergruppe: komplette Quartette liegen eng als ein Stapel. */
+const groupWidth = (c, w, dx) => (c === 4 ? w + 3 * 3 : w + (c - 1) * dx);
+const groupDX = (c, dx) => (c === 4 ? 3 : dx);
+
+// --------------------------------------------------------------- Render
+function render() {
+  if (!V || V.phase === "none") return;
+  renderSeats();
+  renderCenter();
+  renderMePlate();
+  renderWallet();
+  renderOfferPile();
+  renderHand();
+  renderActions();
+  renderTopButtons();
+  if (V.phase === "over") showResults();
+}
+
+function seatHTML(p, width, rows) {
+  const P = V.players[p];
+  const revealed = P.revealed !== undefined ? ` · <span title="nach Zahlungsunfähigkeit offengelegt">💰${P.revealed}</span>` : "";
+  // Geld: kleiner Fächer aus Rückseiten, Anzahl nur grob
+  const k = MONEY_FAN[P.stack];
+  let money = "";
+  for (let i = 0; i < k; i++) {
+    money += `<div class="card mback" style="width:40px;height:60px;left:${i * 5}px;bottom:0;transform:rotate(${(i - (k - 1) / 2) * 4}deg)"></div>`;
+  }
+  const moneyBox = `<div class="mini-money" style="width:${k ? 40 + 5 * (k - 1) : 40}px" title="Geld (nur grob sichtbar)">${money || '<span class="broke">pleite</span>'}</div>`;
+  // Tiere: pro Art ein Stapel, bei seitlichen Gegnern auf zwei Reihen verteilt
+  const pickable = new Set((V.options || []).filter((o) => o.target === p).map((o) => o.animal));
+  const groups = [];
+  P.animals.forEach((c, a) => { if (c) groups.push([a, c]); });
+  const DX = 10;
+  const perRow = Math.max(1, Math.ceil(groups.length / rows));
+  let animals = "";
+  let boxW = 0;
+  const usedRows = Math.max(1, Math.ceil(groups.length / perRow));
+  for (let r = 0; r < usedRows; r++) {
+    const rowGroups = groups.slice(r * perRow, (r + 1) * perRow);
+    const widths = rowGroups.map(([, c]) => groupWidth(c, OPP.w, DX));
+    const { xs, width: rw } = packPositions(widths, width, 8);
+    boxW = Math.max(boxW, rw);
+    rowGroups.forEach(([a, c], gi) => {
+      const dx = groupDX(c, DX);
+      let cards = "";
+      for (let i = 0; i < c; i++) cards += `<div class="card opp" style="left:${i * dx}px;bottom:${c === 4 ? i : i * 3}px;background-image:url(${tierImg(animalKey(a))})"></div>`;
+      const pick = pickable.has(a);
+      animals += `<div class="ogroup${c === 4 ? " full" : ""}${pick ? " pick" : ""}" data-a="${a}"
+        style="left:${xs[gi]}px;top:${r * ROW_STEP}px;width:${widths[gi]}px;z-index:${r * 20 + gi + 1}"
+        title="${V.animals[a].name} · ${V.animals[a].value} · ${c === 4 ? "Quartett komplett" : `${c}/4`}${pick ? " – klicken zum Herausfordern" : ""}">${cards}<span class="cnt">${c === 4 ? "✓" : c}</span></div>`;
+    });
+  }
+  const h = OPP.h + (usedRows - 1) * ROW_STEP + 8;
+  const animalsBox = groups.length
+    ? `<div class="opp-animals" style="width:${boxW}px;height:${h}px">${animals}</div>`
+    : `<div class="no-animals">noch keine Tiere</div>`;
+  return `
+    <div class="seat-head">
+      ${moneyBox}
+      <div class="avatar-wrap">${avatarHTML(p)}${badgesHTML(p)}</div>
+      <div class="nameplate"><b>${P.name}</b><span class="sub"><span class="pts">${scoreOf(P.animals)}</span> Pkt · ${P.quartets} Quartett${P.quartets === 1 ? "" : "e"}${revealed}</span></div>
+      ${bubbleHTML(p)}
+    </div>
+    <div class="seat-cards">${animalsBox}</div>`;
+}
+
+function renderSeats() {
+  const box = $("#seats");
+  const pos = SEAT_POS[V.n - 1];
+  const want = [];
+  for (let i = 1; i < V.n; i++) want.push((V.me + i) % V.n);
+  if (box.dataset.players !== want.join(",")) {
+    box.innerHTML = "";
+    box.dataset.players = want.join(",");
+    want.forEach((p) => {
+      const s = el("div", "seat");
+      s.dataset.p = p;
+      box.appendChild(s);
+    });
+  }
+  want.forEach((p, i) => {
+    const seat = box.querySelector(`.seat[data-p="${p}"]`);
+    const [x, y, w, rows] = pos[i];
+    seat.style.left = `${x}px`;
+    seat.style.top = `${y}px`;
+    seat.style.width = `${w}px`;
+    seat.classList.toggle("active", V.to_act === p);
+    const html = seatHTML(p, w, rows);
+    if (seat.dataset.html !== html) {
+      seat.dataset.html = html;
+      seat.innerHTML = html;
+      seat.querySelectorAll(".ogroup.pick").forEach((g) => (g.onclick = () => act({ kind: "challenge", target: p, animal: +g.dataset.a })));
+    }
+  });
+}
 
 function renderCenter() {
-  $("#deck").classList.toggle("empty", V.deck_left === 0);
-  $("#deck").classList.toggle("img", document.body.classList.contains("img-back"));
-  $("#deck-count").textContent = V.deck_left ? `${V.deck_left} Karten · ${V.donkeys}/4 Esel` : "";
-  const rev = $("#revealed");
-  const hud = $("#hud");
+  const area = $("#pile-area");
+  const deck = $("#deck");
   const au = V.auction;
-  const key = au ? `${au.card}-${V.deck_left}` : "none";
+  const t = V.trade;
+  // Stapel aus leicht versetzten Karten
+  const layers = Math.min(8, Math.ceil(V.deck_left / 5));
+  if (deck.dataset.n !== String(layers)) {
+    deck.dataset.n = layers;
+    deck.innerHTML = Array.from({ length: layers }, (_, i) => {
+      const r = [-1.5, 1, -0.5, 1.8, -1.2, 0.6, -2, 1.4][i];
+      return `<div class="card mid back" style="left:${i * 1.3}px;top:${-i * 1.7}px;transform:rotate(${r}deg)"></div>`;
+    }).join("");
+  }
+  $("#deck-count").textContent = V.deck_left ? `${V.deck_left} Karten · Esel ${V.donkeys}/4` : "";
+  $("#deck-count").style.display = V.deck_left ? "" : "none";
+
+  let shown = null;
+  let key = "none";
+  if (V.phase === "auction" && au) { shown = au.card; key = `a${au.card}-${V.deck_left}`; }
+  else if (t) { shown = t.animal; key = `t${t.animal}-${t.challenger}-${t.target}`; }
+  area.classList.toggle("hidden", shown === null && !V.deck_left);
+  const rev = $("#revealed");
   if (rev.dataset.key !== key) {
     rev.dataset.key = key;
-    rev.innerHTML = au ? cardHTML(au.card) : "";
+    rev.innerHTML = shown === null ? ""
+      : `<div class="flip in"><div class="face b"></div><div class="face f" style="background-image:url(${tierImg(animalKey(shown))})"></div></div>`;
   }
+  // verdeckter Geldstapel des Herausforderers liegt neben der Karte auf dem Tisch
+  const ts = $("#tstack");
+  const cnt = t && t.offer_count !== undefined ? t.offer_count : null;
+  const tkey = cnt === null ? "" : `${cnt}-${t.my_offer ?? ""}`;
+  if (ts.dataset.key !== tkey) {
+    ts.dataset.key = tkey;
+    ts.innerHTML = cnt === null ? "" : Array.from({ length: Math.max(cnt, 0) }, (_, i) =>
+      `<div class="card mback" style="left:${i * 6}px;top:${-i * 2}px;transform:rotate(${((i * 37) % 11) - 5}deg)"></div>`).join("")
+      + `<span class="lab">${cnt ? `${cnt} verdeckte Karte${cnt === 1 ? "" : "n"}` : "leerer Stapel"}${t.my_offer !== undefined ? ` · Wert ${t.my_offer}` : ""}</span>`;
+    ts.title = cnt === null ? "" : `${cnt} verdeckte Geldkarte${cnt === 1 ? "" : "n"}`;
+  }
+  const flip = rev.querySelector(".flip");
+  if (flip) flip.classList.toggle("glow", !!(au && au.high !== null) || !!t);
+
+  const plaque = $("#plaque");
   if (V.phase === "auction" && au) {
-    const name = (p) => (p === V.me ? "Du" : V.players[p].name);
-    hud.innerHTML = `
-      <div class="row"><span class="lbl">Versteigerer</span><span class="who"><span class="tag auct">🔨 ${name(au.auctioneer)}</span></span></div>
-      <div class="row" style="margin-top:4px">
-        <div><div class="lbl">Höchstgebot</div><div class="amt">${au.high === null ? "–" : au.amount}</div></div>
-        <div><div class="lbl">Höchstbietend</div><div class="who">${au.high === null ? "niemand" : `<span class="tag high">👑 ${name(au.high)}</span>`}</div></div>
-      </div>
-      ${au.excluded.length ? `<div class="row" style="margin-top:4px"><span class="lbl">Ausgeschlossen:</span> ${au.excluded.map((p) => `<span class="tag out">${name(p)}</span>`).join(" ")}</div>` : ""}
-      ${au.stage === "choice" ? `<div class="row" style="margin-top:6px"><span class="lbl">${name(au.auctioneer)} entscheidet: Geld nehmen oder Vorkaufsrecht</span></div>` : ""}`;
+    const amount = au.high === null ? null : au.amount;
+    const bump = amount !== null && amount !== lastAmount;
+    lastAmount = amount;
+    const hist = bidHistory.slice(-4).map((b) => `<b>${nameOf(b.p)}</b> ${b.amount}`).join(" → ");
+    plaque.innerHTML = `
+      <div class="lbl">Versteigerer</div>
+      <div class="who"><span class="pill auct">🔨 ${nameOf(au.auctioneer)}</span></div>
+      <hr>
+      <div class="lbl">Höchstgebot</div>
+      <div class="amt${bump ? " bump" : ""}">${amount === null ? "–" : amount}</div>
+      <div class="who">${au.high === null ? "noch kein Gebot" : `<span class="pill high">👑 ${nameOf(au.high)}</span>`}</div>
+      ${hist ? `<div class="history">${hist}</div>` : ""}
+      ${au.excluded.length ? `<hr><div class="lbl">Ausgeschlossen</div><div>${au.excluded.map((p) => `<span class="pill out">${nameOf(p)}</span>`).join(" ")}</div>` : ""}
+      ${au.stage === "choice" ? `<hr><div class="who">${au.auctioneer === V.me ? "Deine Entscheidung!" : `${nameOf(au.auctioneer)} entscheidet…`}</div>` : ""}`;
+  } else if (V.phase === "trade" && t) {
+    const cnt = t.offer_count;
+    plaque.innerHTML = `
+      <div class="lbl">Kuhhandel</div>
+      <div class="who" style="font-size:18px;margin:4px 0">${nameOf(t.challenger)} <span style="opacity:.6">⚔</span> ${nameOf(t.target)}</div>
+      <div>${t.k}× ${V.animals[t.animal].name}</div>
+      ${cnt !== undefined ? `<hr><div class="lbl">Verdecktes Gebot</div>
+        <div>${cnt} Karte${cnt === 1 ? "" : "n"} liegen auf dem Tisch${t.my_offer !== undefined ? ` · Wert <b>${t.my_offer}</b>` : ""}</div>` : ""}`;
   } else if (V.phase === "trade") {
-    const t = V.trade;
-    if (t) {
-      const A = V.animals[t.animal];
-      const name = (p) => (p === V.me ? "Du" : V.players[p].name);
-      rev.innerHTML = cardHTML(t.animal);
-      rev.dataset.key = "trade";
-      hud.innerHTML = `
-        <div class="lbl">Kuhhandel</div>
-        <div class="who" style="font-size:20px;margin:4px 0">${name(t.challenger)} ⚔️ ${name(t.target)}</div>
-        <div>${t.k}× ${A.name}</div>
-        ${t.offer_count !== undefined ? `<div class="row" style="margin-top:6px"><div class="pile">${pileHTML(Math.min(5, Math.ceil(t.offer_count / 2)))}</div><div>${t.offer_count} Schein${t.offer_count === 1 ? "" : "e"} verdeckt${t.my_offer !== undefined ? ` (Wert ${t.my_offer})` : ""}</div></div>` : ""}`;
-    } else {
-      rev.innerHTML = "";
-      rev.dataset.key = "";
-      const cur = V.players[V.to_act];
-      hud.innerHTML = `<div class="lbl">Phase 2</div><div class="who" style="font-size:20px">Kuhhandel</div>
-        <div style="margin-top:4px">${V.trade_busy ? "Zwei Spieler verhandeln verdeckt…" : cur ? `${V.to_act === V.me ? "Du bist" : cur.name + " ist"} am Zug` : ""}</div>`;
-    }
-  } else if (V.phase === "over") {
-    rev.innerHTML = "";
-    hud.innerHTML = `<div class="who" style="font-size:22px">Spiel beendet</div>`;
+    const cur = V.to_act;
+    plaque.innerHTML = `
+      <div class="lbl">Phase 2</div>
+      <div class="amt" style="font-size:36px">Kuhhandel</div>
+      <div class="who" style="margin-top:6px">${V.trade_busy ? "Zwei Spieler verhandeln verdeckt…" : cur === null ? "" : cur === V.me ? "Du bist am Zug" : `${nameOf(cur)} ist am Zug`}</div>`;
+  } else {
+    plaque.innerHTML = `<div class="amt" style="font-size:36px">Spielende</div>`;
   }
 }
 
-function renderMe() {
+function renderTopButtons() {
+  $("#m-skip").style.display = V.phase === "auction" ? "" : "none";
+  $("#stage").classList.toggle("p2", V.phase !== "auction");
+}
+
+function renderMePlate() {
   const P = V.players[V.me];
   const plate = $("#me-plate");
   plate.className = V.to_act === V.me ? "active" : "";
-  plate.innerHTML = `<div class="avatar">${AVATARS[V.me % AVATARS.length]}</div>
-    <div><div class="nm" style="font-weight:600">${P.name}</div><div class="badges">${badgesFor(V.me)}</div></div>${bubbleFor(V.me)}`;
-  renderWallet(P);
-  renderHand(P);
+  plate.innerHTML = `
+    <div class="avatar-wrap">${avatarHTML(V.me)}${badgesHTML(V.me)}</div>
+    <div class="nameplate">
+      <b>${P.name}</b>
+      <div class="chips">
+        <span class="chip">💰 <b>${P.cash}</b></span>
+        <span class="chip">⭐ <b>${scoreOf(P.animals)}</b> Pkt</span>
+        ${V.phase === "auction" ? `<span class="chip" title="Maximales Gebot = Bargeld × 2 + 100">Limit <b>${V.cap}</b></span>` : ""}
+      </div>
+    </div>
+    ${bubbleHTML(V.me)}`;
 }
 
-function noteList(notes) {
-  const list = [];
-  notes.forEach((c, i) => { for (let k = 0; k < c; k++) list.push(i); });
-  return list;
-}
-
-function renderWallet(P) {
+function renderWallet() {
   const w = $("#wallet");
   w.innerHTML = "";
-  const list = noteList(P.notes);
-  const width = w.offsetWidth || 400;
-  const step = list.length > 1 ? Math.min(30, (width - 130) / (list.length - 1)) : 0;
-  const spread = Math.min(50, list.length * 4);
-  list.forEach((di, idx) => {
-    const d = V.denoms[di];
-    const b = moneyImg[d]
-      ? el("div", "bill img", `<img src="assets/money/${d}.png" alt="${d}">`)
-      : el("div", `bill d${d}`, `<span class="v s">${d}</span><span class="emb">${BILL_EMB[d]}</span><span class="v">${d}</span>`);
-    const ang = list.length > 1 ? -spread / 2 + (spread * idx) / (list.length - 1) : 0;
-    const sel = selected.has(idx);
-    b.style.left = `${idx * step}px`;
-    b.style.zIndex = idx + 1;
-    b.style.transform = `rotate(${ang}deg) translateY(${sel ? -34 : 0}px)`;
-    b.onmouseenter = () => { if (!selected.has(idx)) b.style.transform = `rotate(${ang}deg) translateY(-18px)`; };
-    b.onmouseleave = () => { b.style.transform = `rotate(${ang}deg) translateY(${selected.has(idx) ? -34 : 0}px)`; };
-    if (selectMode) {
-      b.classList.add("selectable");
-      if (sel) b.classList.add("sel");
-      b.onclick = () => { selected.has(idx) ? selected.delete(idx) : selected.add(idx); render(); };
+  const notes = V.players[V.me].notes;
+  const idx = V.denoms.map((_, i) => i).filter((i) => notes[i] > 0);
+  const { xs } = packPositions(idx.map(() => OWN.w), 460, 12);
+  idx.forEach((i, k) => {
+    const avail = notes[i] - selected[i];
+    const d = V.denoms[i];
+    const s = el("div", "mstack" + (avail ? "" : " empty") + (selectMode && avail ? " selectable" : ""));
+    s.style.left = `${xs[k]}px`;
+    s.style.zIndex = k + 1;
+    const layers = Math.min(Math.max(avail, 1), 4);
+    for (let j = 0; j < layers; j++) {
+      s.appendChild(Object.assign(el("div", "card own"), {
+        style: `left:${j * 2}px;bottom:${j * 3}px;background-image:url(${geldImg(d)})`,
+      }));
     }
-    w.appendChild(b);
+    s.appendChild(el("span", "cnt", `×${avail}`));
+    s.title = `${avail}× ${d}`;
+    if (selectMode && avail) s.onclick = () => { selected[i]++; render(); };
+    w.appendChild(s);
   });
-  const counts = V.denoms.map((d, i) => `${P.notes[i]}×${d}`).filter((s) => !s.startsWith("0×")).join(" · ");
-  $("#wallet-help").innerHTML = `
-    <span class="chip">💰 Bargeld <b>${P.cash}</b></span>
-    <span class="chip">${list.length} Scheine</span>
-    ${V.phase === "auction" ? `<span class="chip" title="Max. Gebot = Bargeld × 2 + 100">Gebotslimit <b>${V.cap}</b></span>` : ""}
-    <span class="chip" title="${counts}">Punkte jetzt <b>${scoreOf(P.animals)}</b></span>`;
 }
 
-function renderHand(P) {
+function renderOfferPile() {
+  const box = $("#offer-pile");
+  box.classList.toggle("show", !!selectMode);
+  if (!selectMode) { box.innerHTML = ""; return; }
+  const list = [];
+  selected.forEach((c, i) => { for (let k = 0; k < c; k++) list.push(i); });
+  const sum = list.reduce((s, i) => s + V.denoms[i], 0);
+  box.innerHTML = `<span class="title">${selectMode === "offer" ? "Dein Gebot" : "Dein Gegengebot"}: ${list.length} Karten · Wert <b>${sum}</b></span>`;
+  if (!list.length) {
+    box.innerHTML += `<div class="empty-hint">⬇ Klicke unten auf deine Geldstapel, um Karten hierher zu legen.</div>`;
+    return;
+  }
+  const step = list.length > 1 ? Math.min(60, (460 - OWN.w) / (list.length - 1)) : 0;
+  list.forEach((i, k) => {
+    const c = el("div", "card own");
+    c.style.cssText = `left:${k * step}px;top:24px;background-image:url(${geldImg(V.denoms[i])});transform:rotate(${(k - (list.length - 1) / 2) * 2}deg);z-index:${k + 1}`;
+    c.title = "Zurücklegen";
+    c.onclick = () => { selected[i]--; render(); };
+    box.appendChild(c);
+  });
+}
+
+function renderHand() {
   const hand = $("#hand");
   hand.innerHTML = "";
-  const cw = parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--card-w"));
+  const P = V.players[V.me];
+  const p2 = V.phase === "trade";
+  const CW = p2 ? 124 : OWN.w, CH = p2 ? 186 : OWN.h;
+  const DX = 16, DY = 8, W = p2 ? 880 : 480;
   const groups = [];
   P.animals.forEach((c, a) => { if (c) groups.push([a, c]); });
-  const pickAnimals = new Set((V.options || []).map((o) => o.animal));
-  const DX = 16, DY = 9;
-  const widths = groups.map(([, c]) => cw + (c - 1) * DX);
-  const total = widths.reduce((x, y) => x + y, 0) + 12 * Math.max(0, groups.length - 1);
-  const avail = hand.offsetWidth - 20;
-  const overlap = groups.length > 1 && total > avail ? (total - avail) / (groups.length - 1) + 12 : -12;
+  hand.style.width = `${W}px`;
+  if (!groups.length) { hand.innerHTML = `<div class="hand-empty">Noch keine Tierkarten</div>`; return; }
+  const options = V.options || [];
+  const pickAnimals = new Set(options.map((o) => o.animal));
+  const target = V.trade && V.trade.target === V.me ? V.trade.animal : null;
+  const widths = groups.map(([, c]) => groupWidth(c, CW, DX));
+  const { xs, width } = packPositions(widths, W, p2 ? 22 : 14);
+  const x0 = W - width; // rechtsbündig
   groups.forEach(([a, c], gi) => {
-    const g = el("div", "group" + (c === 4 ? " full" : "") + (pickAnimals.has(a) ? " pick" : ""));
+    const full = c === 4;
+    const g = el("div", "hgroup" + (full ? " full" : "") + (pickAnimals.has(a) ? " pick" : "") + (target === a ? " target" : ""));
+    const left = x0 + xs[gi];
+    const dx = groupDX(c, DX);
+    g.dataset.a = a;
+    g.style.left = `${left}px`;
     g.style.width = `${widths[gi]}px`;
-    if (gi > 0) g.style.marginLeft = `${-overlap}px`;
-    g.innerHTML = `<span class="count">${c}<span class="lbl">/4 ${V.animals[a].name}${c === 4 ? " ✓" : ""}</span></span>`;
-    const cardH = parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--card-h"));
-    g.querySelector(".count").style.bottom = `${cardH + (c - 1) * DY - 14}px`;
+    g.style.height = `${CH}px`;
+    g.style.zIndex = gi + 1;
     for (let i = 0; i < c; i++) {
-      const w = el("div", null, cardHTML(a));
-      const card = w.firstElementChild;
-      card.style.left = `${i * DX}px`;
-      card.style.bottom = `${i * DY}px`;
-      card.style.zIndex = i;
+      const card = el("div", "card");
+      card.style.cssText = `width:${CW}px;height:${CH}px;left:${i * dx}px;bottom:${full ? i : i * DY}px;z-index:${i + 2};background-image:url(${tierImg(animalKey(a))})`;
       g.appendChild(card);
     }
-    // Beim Hovern auffächern, damit jede Karte sichtbar ist
-    g.onmouseenter = () => g.querySelectorAll(".card").forEach((k, i) => { k.style.transform = `translate(${i * (cw * 0.62 - DX)}px, ${-i * 4}px)`; });
-    g.onmouseleave = () => g.querySelectorAll(".card").forEach((k) => { k.style.transform = ""; });
-    if (pickAnimals.has(a)) g.title = "Mit dieser Tierart herausfordern";
+    g.appendChild(el("span", "cnt", full ? "✓ Quartett" : `${c}/4`));
+    g.appendChild(el("span", "name", `${V.animals[a].name} · ${V.animals[a].value}`));
+    if (p2) {
+      g.appendChild(popsFor(a, c, options));
+    } else if (!full && c > 1) {
+      // Phase 1: beim Hovern auffächern, ohne über den Tischrand zu ragen
+      g.onmouseenter = () => {
+        const sp = CW * 0.62;
+        let shift = -((c - 1) * sp) / 2;
+        shift = Math.min(shift, W - left - ((c - 1) * sp + CW));
+        shift = Math.max(shift, -left);
+        g.querySelectorAll(".card").forEach((k, i) => { k.style.transform = `translate(${shift + i * sp - i * DX}px, ${i * DY}px) rotate(${(i - (c - 1) / 2) * 4}deg)`; });
+      };
+      g.onmouseleave = () => g.querySelectorAll(".card").forEach((k) => { k.style.transform = ""; });
+    }
     hand.appendChild(g);
   });
-  if (!groups.length) hand.innerHTML = `<div style="opacity:.55;margin-bottom:60px">Noch keine Tierkarten</div>`;
 }
 
-function selectedNotes() {
-  const counts = V.denoms.map(() => 0);
-  const list = noteList(V.players[V.me].notes);
-  for (const idx of selected) counts[list[idx]]++;
-  return counts;
+/** Kuhhandel: Hinter der Karte kommen die Gegner hervor, die dieses Tier auch haben. */
+function popsFor(a, c, options) {
+  const box = el("div", "pops");
+  const holders = [];
+  for (let i = 1; i < V.n; i++) {
+    const q = (V.me + i) % V.n;
+    const n = V.players[q].animals[a];
+    if (n > 0) holders.push([q, n]);
+  }
+  const canChallenge = (q) => options.some((o) => o.target === q && o.animal === a);
+  let items = holders;
+  if (c === 4) items = [[null, "Quartett komplett"]];
+  else if (!holders.length) items = [[null, "Niemand sonst"]];
+  const spread = items.length > 1 ? Math.min(26, 60 / (items.length - 1)) : 0;
+  items.forEach(([q, n], i) => {
+    const ang = items.length > 1 ? -((items.length - 1) * spread) / 2 + i * spread : 0;
+    const active = q !== null && canChallenge(q);
+    const pop = el("div", "pop" + (active ? " active" : "") + (q === null ? " info" : ""));
+    pop.style.setProperty("--ang", `${ang}deg`);
+    pop.style.setProperty("--d", `${i * 50}ms`);
+    if (q === null) {
+      pop.innerHTML = `<div class="pn">${n}</div>`;
+    } else {
+      const full = n === 4;
+      pop.innerHTML = `${avatarHTML(q)}<div class="pn">${V.players[q].name}</div>
+        <div class="pc"><b>${n}</b>× ${full ? "(komplett)" : ""}</div>
+        ${active ? `<div class="pa">⚔ Herausfordern</div>` : ""}`;
+      pop.title = active ? `${V.players[q].name} um ${V.animals[a].name} herausfordern` : `${V.players[q].name} hat ${n}× ${V.animals[a].name}`;
+      if (active) pop.onclick = (e) => { e.stopPropagation(); act({ kind: "challenge", target: q, animal: a }); };
+    }
+    box.appendChild(pop);
+  });
+  return box;
 }
+
 const notesSum = (c) => c.reduce((s, x, i) => s + x * V.denoms[i], 0);
+const notesCount = (c) => c.reduce((s, x) => s + x, 0);
 
 function renderActions() {
   const box = $("#actions");
-  const name = (p) => V.players[p].name;
-  if (V.phase === "over") { box.innerHTML = `<h4>Spiel beendet</h4><button class="btn primary" onclick="showStart()">Neues Spiel</button>`; return; }
-  if (V.to_act !== V.me) {
+  const P = V.players[V.me];
+  const mine = V.to_act === V.me && V.phase !== "over";
+  box.classList.toggle("mine", mine);
+  if (V.phase === "over") {
+    box.innerHTML = `<div class="waiting">Spiel beendet</div>`;
+    return;
+  }
+  if (!mine) {
     selectMode = null;
-    let txt = V.to_act === null ? "" : `${name(V.to_act)} ist am Zug`;
-    if (V.phase === "trade" && V.trade_busy) txt = "Andere Spieler verhandeln";
-    if (V.phase === "auction" && V.auction && V.auction.auctioneer === V.me) txt = `Du versteigerst · ${txt}`;
+    let txt = V.to_act === null ? "" : `${nameOf(V.to_act)} ist am Zug`;
+    if (V.phase === "trade" && V.trade_busy) txt = "Andere Spieler verhandeln verdeckt";
+    if (V.phase === "auction" && V.auction && V.auction.auctioneer === V.me && V.auction.stage === "bidding") txt = `Du versteigerst – ${txt}`;
     box.innerHTML = `<div class="waiting">${txt}<span class="dots"></span></div>`;
     return;
   }
   const au = V.auction;
-  const P = V.players[V.me];
   if (V.phase === "auction" && au.stage === "bidding") {
     const min = au.min_bid;
     if (bidValue < min || bidValue > V.cap) bidValue = min;
-    const quick = [min, min + 40, min + 90, min + 190].filter((x, i, arr) => x <= V.cap && arr.indexOf(x) === i);
+    const quick = [["+10", min], ["+50", min + 40], ["+100", min + 90], ["+200", min + 190]].filter(([, x]) => x <= V.cap);
     box.innerHTML = `
       <h4>Dein Gebot für ${V.animals[au.card].name}</h4>
-      <div class="btns" style="align-items:center">
+      <div class="btns">
         <button class="btn small" id="bm">−10</button>
         <input class="bid-input" id="bv" type="number" step="10" min="${min}" max="${V.cap}" value="${bidValue}">
         <button class="btn small" id="bp">+10</button>
         <button class="btn primary" id="bgo">Bieten</button>
         <button class="btn danger" id="bpass">Passen</button>
       </div>
-      <div class="btns" style="margin-top:6px">${quick.map((q) => `<button class="btn small" data-q="${q}">${q}</button>`).join("")}</div>
-      <div class="hint ${bidValue > P.cash ? "warn" : ""}" id="bhint"></div>`;
+      <div class="btns" style="margin-top:8px">${quick.map(([l, q]) => `<button class="btn small" data-q="${q}" title="${q}">${l}</button>`).join("")}</div>
+      <div class="hint" id="bhint"></div>`;
     const upd = () => {
       $("#bv").value = bidValue;
       const h = $("#bhint");
       h.className = "hint" + (bidValue > P.cash ? " warn" : "");
       h.textContent = bidValue > P.cash
         ? `Bluff! Du hast nur ${P.cash}. Nimmt der Versteigerer das Geld, fliegst du auf.`
-        : `Mindestens ${min} · Limit ${V.cap}`;
+        : `Mindestens ${min} · dein Limit ${V.cap} · Enter = bieten`;
     };
     upd();
     $("#bm").onclick = () => { bidValue = Math.max(min, bidValue - 10); upd(); };
     $("#bp").onclick = () => { bidValue = Math.min(V.cap, bidValue + 10); upd(); };
     $("#bv").oninput = (e) => { bidValue = Math.round((+e.target.value || min) / 10) * 10; };
+    $("#bv").onkeydown = (e) => { if (e.key === "Enter") act({ kind: "bid", amount: bidValue }); };
     box.querySelectorAll("[data-q]").forEach((b) => (b.onclick = () => { bidValue = +b.dataset.q; upd(); }));
     $("#bgo").onclick = () => act({ kind: "bid", amount: bidValue });
     $("#bpass").onclick = () => act({ kind: "pass" });
@@ -375,10 +521,10 @@ function renderActions() {
   if (V.phase === "auction" && au.stage === "choice") {
     const canBuy = V.legal.includes("buy");
     box.innerHTML = `
-      <h4>${name(au.high)} bietet ${au.amount} für ${V.animals[au.card].name}</h4>
+      <h4>${nameOf(au.high)} bietet <span class="num" style="font-size:24px">${au.amount}</span> für ${V.animals[au.card].name}</h4>
       <div class="btns">
         <button class="btn primary" id="take">💰 Geld nehmen</button>
-        <button class="btn" id="buy" ${canBuy ? "" : "disabled"}>✋ Vorkaufsrecht (${au.amount} zahlen)</button>
+        <button class="btn go" id="buy" ${canBuy ? "" : "disabled"}>✋ Selbst kaufen (${au.amount})</button>
       </div>
       <div class="hint">${canBuy ? "Vorkaufsrecht: Du zahlst den Betrag und behältst die Karte." : "Für das Vorkaufsrecht reicht dein Bargeld nicht."}</div>`;
     $("#take").onclick = () => act({ kind: "take" });
@@ -386,112 +532,257 @@ function renderActions() {
     return;
   }
   if (V.phase === "trade" && !V.trade) {
-    const opts = V.options || [];
-    box.innerHTML = `<h4>Wen forderst du heraus?</h4>
-      <div class="opt-grid">${opts.map((o, i) => `<button class="btn small" data-o="${i}">${EMOJI[V.animals[o.animal].key]} ${V.animals[o.animal].name} ↔ ${name(o.target)}</button>`).join("")}</div>
-      <div class="hint">Oder klicke auf eine markierte Karte eines Gegners.</div>`;
-    box.querySelectorAll("[data-o]").forEach((b) => (b.onclick = () => {
-      const o = opts[+b.dataset.o];
-      act({ kind: "challenge", target: o.target, animal: o.animal });
-    }));
+    box.innerHTML = `<h4>Du bist dran: Wen forderst du heraus?</h4>
+      <div>Fahre über eine deiner leuchtenden Karten – dahinter erscheinen die Gegner, die dieses Tier auch haben. Klicke einen an.</div>
+      <div class="hint">Alternativ: Karte mit ⚔️ direkt bei einem Gegner anklicken.</div>`;
     return;
   }
   const t = V.trade;
-  if (t && t.stage === "offer") {
-    selectMode = "offer";
-    const s = selectedNotes();
-    box.innerHTML = `<h4>Dein verdecktes Gebot: ${t.k}× ${V.animals[t.animal].name} von ${name(t.target)}</h4>
-      <div>Klicke Geldscheine an: <b>${s.reduce((a, b) => a + b, 0)} Scheine · Wert ${notesSum(s)}</b></div>
-      <div class="btns" style="margin-top:8px"><button class="btn primary" id="go">Verdeckt hinlegen</button></div>
-      <div class="hint">${name(t.target)} sieht nur die Anzahl der Scheine. 0er-Scheine eignen sich zum Bluffen.</div>`;
-    $("#go").onclick = () => act({ kind: "offer", notes: selectedNotes() });
-    renderWallet(P);
+  const quartet = V.animals[t.animal].value;
+  const overWarn = (s) => (notesSum(s) > quartet ? `<div class="hint warn">Achtung: mehr als der ganze Quartettwert (${quartet})!</div>` : "");
+  if (t.stage === "offer") {
+    if (selectMode !== "offer") { selectMode = "offer"; renderWallet(); renderOfferPile(); }
+    box.innerHTML = `<h4>Verdecktes Gebot für ${t.k}× ${V.animals[t.animal].name} von ${nameOf(t.target)}</h4>
+      <div>${notesCount(selected)} Karten · Wert <span class="num" style="font-size:20px">${notesSum(selected)}</span></div>
+      <div class="btns" style="margin-top:10px"><button class="btn primary" id="go">Verdeckt hinlegen</button></div>
+      ${overWarn(selected)}
+      <div class="hint">${nameOf(t.target)} sieht nur die Anzahl der Karten – 0er-Karten eignen sich zum Bluffen.</div>`;
+    $("#go").onclick = () => act({ kind: "offer", notes: selected });
     return;
   }
-  if (t && t.stage === "respond") {
-    if (selectMode !== "counter") {
-      box.innerHTML = `<h4>${name(t.challenger)} will ${t.k}× ${V.animals[t.animal].name} und legt ${t.offer_count} Schein${t.offer_count === 1 ? "" : "e"}</h4>
-        <div class="btns"><button class="btn primary" id="acc">Annehmen (Geld nehmen)</button><button class="btn" id="ctr">Gegengebot</button></div>
-        <div class="hint">Bei einem Gegengebot werden die Stapel getauscht, der Höhere gewinnt. Gleichstand: ${name(t.challenger)} gewinnt.</div>`;
-      $("#acc").onclick = () => act({ kind: "accept" });
-      $("#ctr").onclick = () => { selectMode = "counter"; selected.clear(); render(); };
-      return;
+  if (selectMode !== "counter") {
+    box.innerHTML = `<h4>${nameOf(t.challenger)} will ${t.k}× ${V.animals[t.animal].name} und bietet ${t.offer_count} verdeckte Karte${t.offer_count === 1 ? "" : "n"}</h4>
+      <div class="btns"><button class="btn primary" id="acc">Annehmen</button><button class="btn go" id="ctr">Gegengebot</button></div>
+      <div class="hint">Annehmen: Du bekommst den Stapel, ${nameOf(t.challenger)} die Karte(n). Gegengebot: Der Höhere gewinnt und zahlt die Differenz; bei Gleichstand gewinnt ${nameOf(t.challenger)}.</div>`;
+    $("#acc").onclick = () => act({ kind: "accept" });
+    $("#ctr").onclick = () => { selectMode = "counter"; selected = [0, 0, 0, 0, 0, 0]; render(); };
+    return;
+  }
+  box.innerHTML = `<h4>Dein verdecktes Gegengebot (${nameOf(t.challenger)} bietet ${t.offer_count} Karte${t.offer_count === 1 ? "" : "n"})</h4>
+    <div>${notesCount(selected)} Karten · Wert <span class="num" style="font-size:20px">${notesSum(selected)}</span></div>
+    <div class="btns" style="margin-top:10px"><button class="btn primary" id="go">Gegengebot legen</button><button class="btn small" id="back">Zurück</button></div>
+    ${overWarn(selected)}`;
+  $("#go").onclick = () => act({ kind: "counter", notes: selected });
+  $("#back").onclick = () => { selectMode = null; selected = [0, 0, 0, 0, 0, 0]; render(); };
+}
+
+// --------------------------------------------------------------- Kartenflüge
+function areaRect(p, animal) {
+  if (p === V.me) {
+    const g = animal !== undefined && document.querySelector(`#hand .hgroup[data-a="${animal}"]`);
+    return (g || $("#hand")).getBoundingClientRect();
+  }
+  const seat = document.querySelector(`.seat[data-p="${p}"]`);
+  if (!seat) return null;
+  const g = animal !== undefined && seat.querySelector(`.ogroup[data-a="${animal}"]`);
+  return (g || seat.querySelector(".opp-animals, .no-animals") || seat).getBoundingClientRect();
+}
+function moneyRect(p) {
+  if (p === V.me) return $("#wallet").getBoundingClientRect();
+  const seat = document.querySelector(`.seat[data-p="${p}"]`);
+  return seat ? (seat.querySelector(".opp-money, .seat-head") || seat).getBoundingClientRect() : null;
+}
+
+/** Vor dem Neuzeichnen: Startpunkte der Flüge merken. */
+function planFlights(prev, events) {
+  const out = [];
+  const revFace = document.querySelector("#revealed .face.f");
+  for (const ev of events) {
+    if (["sold", "bought", "free"].includes(ev.kind) && revFace) {
+      out.push({ img: tierImg(prev.animals[ev.card].key), from: revFace.getBoundingClientRect(), to: { p: ev.player, animal: ev.card } });
+      const au = prev.auction;
+      if (au && ev.kind !== "free") {
+        const payer = ev.kind === "sold" ? ev.player : au.auctioneer;
+        const payee = ev.kind === "sold" ? au.auctioneer : au.high;
+        const from = moneyRect(payer);
+        for (let i = 0; i < 3 && from; i++) out.push({ money: true, from, to: { p: payee, money: true }, delay: 120 + i * 90 });
+      }
     }
-    const s = selectedNotes();
-    box.innerHTML = `<h4>Dein Gegengebot (verdeckt)</h4>
-      <div>Ausgewählt: <b>${s.reduce((a, b) => a + b, 0)} Scheine · Wert ${notesSum(s)}</b></div>
-      <div class="btns" style="margin-top:8px"><button class="btn primary" id="go">Gegengebot legen</button><button class="btn small" id="back">Zurück</button></div>`;
-    $("#go").onclick = () => act({ kind: "counter", notes: selectedNotes() });
-    $("#back").onclick = () => { selectMode = null; selected.clear(); render(); };
-    renderWallet(P);
+    if (ev.kind === "challenge" && ev.animal !== undefined) {
+      for (const who of [ev.challenger, ev.target]) {
+        const from = areaRect(who, ev.animal);
+        for (let i = 0; i < ev.k && from; i++) {
+          out.push({ img: tierImg(prev.animals[ev.animal].key), from, to: { center: true }, delay: i * 120 + (who === ev.target ? 200 : 0) });
+        }
+      }
+    }
+    if (ev.kind === "offer" && prev.trade) {
+      const from = moneyRect(prev.trade.challenger);
+      for (let i = 0; i < Math.min(ev.count || 0, 8) && from; i++) {
+        out.push({ money: true, from, to: { stack: true }, delay: i * 80 });
+      }
+    }
+    if (ev.kind === "trade_result") {
+      const from = areaRect(ev.loser, ev.animal);
+      for (let i = 0; i < ev.k && from; i++) {
+        out.push({ img: tierImg(prev.animals[ev.animal].key), from, to: { p: ev.winner, animal: ev.animal }, delay: i * 140 });
+      }
+    }
+  }
+  return out;
+}
+
+function runFlights(flights) {
+  for (const f of flights) {
+    const to = f.to.center ? $("#revealed").getBoundingClientRect()
+      : f.to.stack ? $("#tstack").getBoundingClientRect()
+      : f.to.money ? moneyRect(f.to.p) : areaRect(f.to.p, f.to.animal);
+    if (!to) continue;
+    const s = $("#stage").getBoundingClientRect().width / 1600; // Bühnenskalierung
+    const w = f.money ? 64 * s : f.from.width, h = f.money ? 96 * s : f.from.height;
+    const x0 = f.from.left + f.from.width / 2 - w / 2, y0 = f.from.top + f.from.height / 2 - h / 2;
+    const c = el("div", "card fly" + (f.money ? " mback" : ""));
+    Object.assign(c.style, { left: `${x0}px`, top: `${y0}px`, width: `${w}px`, height: `${h}px` });
+    if (f.img) c.style.backgroundImage = `url(${f.img})`;
+    document.body.appendChild(c);
+    const dx = to.left + to.width / 2 - (x0 + w / 2), dy = to.top + to.height / 2 - (y0 + h / 2);
+    const scale = f.money ? 0.8 : Math.min(1, (to.height || h) / h);
+    setTimeout(() => {
+      c.style.transform = `translate(${dx}px, ${dy}px) scale(${scale}) rotate(${f.money ? 20 : 8}deg)`;
+      setTimeout(() => { c.style.opacity = "0"; }, 520);
+      setTimeout(() => c.remove(), 1150);
+    }, 30 + (f.delay || 0));
   }
 }
 
-// --------------------------------------------------------------- Log & Toasts
-function logEvent(ev) {
+// --------------------------------------------------------------- Ereignisse
+function handleEvent(ev) {
   const li = el("li", null, ev.text);
+  if (ev.kind === "reveal") {
+    bidHistory = [];
+    lastAmount = null;
+    li.className = "card";
+    li.textContent = `${EMOJI[V.animals[ev.card].key]} ${V.animals[ev.card].name} – Versteigerer ${nameOf(ev.auctioneer)}`;
+  }
+  if (ev.kind === "bid") bidHistory.push({ p: ev.player, amount: ev.amount });
+  if (ev.kind === "bust") { li.className = "bad"; bidHistory = []; lastAmount = null; }
+  if (["sold", "bought", "free", "trade_result"].includes(ev.kind)) li.className = "good";
   $("#log-list").appendChild(li);
-  $("#log").scrollTop = 1e9;
-  const important = ["reveal", "donkey", "sold", "bought", "free", "bust", "trade_result", "phase", "challenge", "offer", "over"];
-  if (important.includes(ev.kind)) toast(ev.text, ["donkey", "bust", "phase", "over"].includes(ev.kind));
+  $("#log-list").scrollTop = 1e9;
+
+  if (ev.kind === "donkey") banner("Esel-Bonus!", ev.text.replace(/^\d+\. Esel! /, ""));
+  else if (ev.kind === "bust") {
+    banner("Aufgeflogen!", ev.text, true);
+    setTimeout(() => {
+      const s = ev.player === V.me ? $("#me-plate") : document.querySelector(`.seat[data-p="${ev.player}"]`);
+      if (s) { s.classList.remove("shake"); void s.offsetWidth; s.classList.add("shake"); }
+    }, 60);
+  } else if (ev.kind === "trade_result") banner("Kuhhandel!", ev.text);
+  else if (ev.kind === "phase") banner("Phase 2", "Alle Karten sind versteigert – jetzt wird gehandelt!");
+  else if (["sold", "bought", "free", "challenge", "offer"].includes(ev.kind)) toast(ev.text);
 }
-function toast(text, gold) {
-  const t = el("div", "toast" + (gold ? " gold" : ""), text);
+function toast(text) {
+  const t = el("div", "toast", text);
   $("#toasts").appendChild(t);
-  setTimeout(() => t.remove(), 3300);
-  while ($("#toasts").children.length > 4) $("#toasts").firstChild.remove();
+  setTimeout(() => t.remove(), 4300);
+  while ($("#toasts").children.length > 3) $("#toasts").firstChild.remove();
+}
+function banner(title, text, bad) {
+  const b = $("#banner");
+  b.className = bad ? "bad" : "";
+  b.innerHTML = `<div class="t">${title}</div><div class="d">${text}</div>`;
+  void b.offsetWidth;
+  b.classList.add("show");
 }
 
-// --------------------------------------------------------------- Start / Ende
+// --------------------------------------------------------------- Start / Ende / Menü
 let nPlayers = 4;
-document.querySelectorAll("#in-players button").forEach((b) => (b.onclick = () => {
-  document.querySelectorAll("#in-players button").forEach((x) => x.classList.remove("on"));
-  b.classList.add("on");
-  nPlayers = +b.dataset.n;
-}));
 let opponents = "ai";
-document.querySelectorAll("#in-opp button").forEach((b) => (b.onclick = () => {
-  document.querySelectorAll("#in-opp button").forEach((x) => x.classList.remove("on"));
-  b.classList.add("on");
-  opponents = b.dataset.o;
-}));
-fetch("/api/info").then((r) => r.json()).then((info) => {
-  if (!info.ai_available) {
-    $("#ai-note").textContent = "Noch keine trainierte KI gefunden – es spielen die einfachen Bots.";
-    document.querySelector('#in-opp [data-o="heuristic"]').click();
-  } else {
-    $("#ai-note").textContent = `KI-Stand: ${info.checkpoint}`;
-  }
-});
-$("#btn-start").onclick = async () => {
-  since = 0;
-  $("#log-list").innerHTML = "";
-  $("#overlay").classList.remove("show");
-  accept(await api("/api/new", { players: nPlayers, name: $("#in-name").value.trim() || "Du", opponents }));
-};
-$("#log-toggle").onclick = () => $("#log").classList.toggle("open");
+const START_HTML = $("#overlay").innerHTML;
+function segment(sel, attr, cb) {
+  document.querySelectorAll(`${sel} button`).forEach((b) => (b.onclick = () => {
+    document.querySelectorAll(`${sel} button`).forEach((x) => x.classList.remove("on"));
+    b.classList.add("on");
+    cb(b.dataset[attr]);
+  }));
+}
+function bindStart() {
+  segment("#in-players", "n", (v) => (nPlayers = +v));
+  segment("#in-opp", "o", (v) => (opponents = v));
+  document.querySelector(`#in-players [data-n="${nPlayers}"]`)?.click();
+  fetch("/api/info").then((r) => r.json()).then((info) => {
+    if (!info.ai_available) {
+      $("#ai-note").textContent = "Noch keine trainierte KI gefunden – es spielen die einfachen Bots.";
+      document.querySelector('#in-opp [data-o="heuristic"]').click();
+    } else {
+      $("#ai-note").textContent = "Trainierte KI-Gegner";
+    }
+  });
+  $("#btn-start").onclick = async () => {
+    clearTimeout(botTimer);
+    since = 0;
+    V = null;
+    bidHistory = [];
+    lastBubble = {};
+    selectMode = null;
+    selected = [0, 0, 0, 0, 0, 0];
+    $("#log-list").innerHTML = "";
+    $("#seats").dataset.players = "";
+    $("#overlay").classList.remove("show");
+    accept(await api("/api/new", { players: nPlayers, name: $("#in-name").value.trim() || "Du", opponents }));
+  };
+}
+bindStart();
 
 function showStart() {
-  $("#overlay").innerHTML = "";
-  location.reload();
+  clearTimeout(botTimer);
+  $("#overlay").innerHTML = START_HTML;
+  bindStart();
+  $("#overlay").classList.add("show");
 }
+
+const closeMenu = () => $("#menu").classList.remove("open");
+$("#menu-toggle").onclick = (e) => { e.stopPropagation(); $("#menu").classList.toggle("open"); };
+segment("#m-speed", "s", (v) => {
+  speed = +v;
+  try { localStorage.setItem("kh-speed", speed); } catch (e) { /* egal */ }
+});
+document.querySelector(`#m-speed [data-s="${speed}"]`).classList.add("on");
+$("#m-log").onclick = () => { closeMenu(); $("#log").classList.add("open"); };
+$("#m-skip").onclick = async () => {
+  closeMenu();
+  if (busy) return;
+  busy = true;
+  clearTimeout(botTimer);
+  selectMode = null;
+  const v = await api("/api/skip_auction", {});
+  busy = false;
+  if (v) accept(v);
+};
+$("#m-new").onclick = () => {
+  closeMenu();
+  if (V && V.phase !== "over" && !confirm("Laufendes Spiel abbrechen und ein neues starten?")) return;
+  showStart();
+};
+$("#log-close").onclick = () => $("#log").classList.remove("open");
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape") { $("#log").classList.remove("open"); closeMenu(); }
+});
+document.addEventListener("click", (e) => {
+  if (!e.target.closest("#menu, #menu-toggle")) closeMenu();
+  if ($("#log").classList.contains("open") && !e.target.closest("#log, #top-buttons")) $("#log").classList.remove("open");
+});
+
 function showResults() {
   const ov = $("#overlay");
   if (ov.classList.contains("show")) return;
-  const rows = V.ranking.map((p, i) => `<div class="r ${i === 0 ? "win" : ""}"><span>${i === 0 ? "🏆" : i + 1 + "."} ${V.players[p].name}</span><span>${V.scores[p]} Pkt · 💰 ${V.cash_all[p]}</span></div>`).join("");
-  ov.innerHTML = `<div class="panel"><h1>Ende!</h1><p class="sub">Quartettwert × Anzahl Quartette</p>
-    <div class="results">${rows}</div><button class="big" onclick="location.reload()">Nochmal spielen</button></div>`;
-  setTimeout(() => ov.classList.add("show"), 1500);
+  const rows = V.ranking.map((p, i) => `<div class="r ${i === 0 ? "win" : ""}">
+      <span>${i === 0 ? "🏆" : `${i + 1}.`} ${V.players[p].name}</span>
+      <span><span class="num">${V.scores[p]}</span> Pkt · 💰 ${V.cash_all[p]}</span></div>`).join("");
+  ov.innerHTML = `<div class="panel"><h1>${V.ranking[0] === V.me ? "Gewonnen!" : "Spielende"}</h1>
+    <p class="sub">Quartettwert × Anzahl Quartette</p>
+    <div class="results">${rows}</div><button class="big" id="again">Nochmal spielen</button></div>`;
+  $("#again").onclick = showStart;
+  setTimeout(() => ov.classList.add("show"), 1800);
 }
 
 function fit() {
-  const s = Math.min(innerWidth / 1476, innerHeight / 896);
+  const s = Math.min(innerWidth / 1620, innerHeight / 920);
   $("#stage").style.transform = `translate(-50%, -50%) scale(${s})`;
 }
 fit();
-window.addEventListener("resize", () => { fit(); render(); });
-loadAssets().then(async () => {
-  const v = await api("/api/state");
+window.addEventListener("resize", fit);
+api("/api/state").then((v) => {
   if (v && v.phase !== "none" && v.phase !== "over") {
     $("#overlay").classList.remove("show");
     accept(v);
