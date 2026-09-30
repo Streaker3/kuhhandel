@@ -51,12 +51,18 @@ button { font-family: inherit; cursor: pointer; }
   font-family: "Lilita One"; font-size: 14px; display: grid; place-items: center;
   box-shadow: 0 2px 5px rgba(0,0,0,.5); white-space: nowrap; pointer-events: none;
 }
-.full > .cnt { background: var(--gold); color: var(--wood); border-color: var(--wood); }
+/* Komplette Quartette: grüner Schimmer, eng gestapelt */
+.full .card { box-shadow: 0 0 0 2px #5fd47a, 0 0 14px 3px rgba(95,212,122,.55), 0 4px 10px rgba(0,0,0,.3) !important; }
+.full > .cnt { background: #3aa655 !important; color: #fff !important; border-color: var(--paper) !important; }
 .fly { position: fixed; z-index: 500; pointer-events: none; transform-origin: 50% 50%; transition: transform .62s cubic-bezier(.3,.7,.2,1), opacity .15s; }
 
 /* ================================================================ Gegner */
 #seats { position: absolute; inset: 0; }
-.seat { position: absolute; transform: translateX(-50%); display: flex; flex-direction: column; align-items: center; }
+.seat {
+  position: absolute; transform: translateX(-50%); display: flex; flex-direction: column; align-items: center;
+  transition: left .3s ease, width .3s ease;
+}
+.seat.focus { z-index: 60 !important; }
 .seat-head { position: relative; display: flex; align-items: center; gap: 10px; }
 .avatar-wrap { position: relative; width: 62px; height: 62px; flex: none; }
 .avatar {
@@ -74,10 +80,12 @@ button { font-family: inherit; cursor: pointer; }
   position: absolute; width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center;
   font-size: 15px; border: 2px solid var(--wood); box-shadow: 0 2px 5px rgba(0,0,0,.45);
 }
-.badge.auct { left: -9px; bottom: -5px; background: #d9a066; }
+.badge.auct { left: -9px; bottom: -5px; background: var(--paper); }
+.badge.auct .gavel { width: 20px; height: 20px; }
 .badge.crown { right: -9px; top: -7px; background: var(--gold); animation: bob 1.4s ease-in-out infinite; }
 .badge.out { right: -9px; bottom: -5px; background: #efb3ab; }
 @keyframes bob { 50% { transform: translateY(-3px); } }
+.gavel { width: 18px; height: 18px; vertical-align: -3px; }
 .nameplate {
   background: linear-gradient(#5a2e17, #3f1f0e); color: var(--paper);
   border: 2px solid #8a5a2b; border-radius: 12px; padding: 3px 14px 5px; box-shadow: 0 4px 10px rgba(0,0,0,.45);
@@ -85,6 +93,13 @@ button { font-family: inherit; cursor: pointer; }
 .nameplate > b { display: block; font-size: 17px; font-weight: 600; line-height: 1.25; }
 .nameplate .sub { font-size: 14px; opacity: .9; white-space: nowrap; }
 .nameplate .pts { color: var(--gold); font-family: "Lilita One"; }
+.nameplate .role {
+  display: inline-flex; align-items: center; gap: 3px; margin-left: 8px; padding: 0 8px; border-radius: 99px;
+  background: var(--gold); color: var(--wood); font-size: 12px; font-weight: 700; vertical-align: 2px;
+}
+.nameplate .role .gavel { width: 14px; height: 14px; }
+
+/* Sprechblasen (Gebote) */
 .bubble {
   position: absolute; left: calc(100% + 12px); top: 50%; transform: translateY(-50%); z-index: 30;
   background: var(--paper); color: var(--ink); padding: 2px 12px; border-radius: 14px;
@@ -99,29 +114,60 @@ button { font-family: inherit; cursor: pointer; }
 .bubble.pass { font-family: "Fredoka"; font-weight: 600; font-size: 16px; color: #8c7b66; background: #e9e1cf; padding: 6px 12px; }
 .bubble.high { background: var(--gold); }
 .bubble.old { opacity: .45; }
+/* rechte Gegner: Sprechblase links vom Kopf, damit sie nicht über den Rand ragt */
+.seat.rside .bubble { left: auto; right: calc(100% + 12px); }
+.seat.rside .bubble::before { left: auto; right: -11px; border-right: 0; border-left: 8px solid var(--wood); }
 @keyframes pop { from { transform: translateY(-50%) scale(.3); opacity: 0; } }
 
-.seat-cards { position: relative; margin-top: 12px; display: flex; gap: 14px; align-items: flex-end; }
-.opp-animals { position: relative; height: calc(var(--opp-h) + 8px); }
-.ogroup { position: absolute; bottom: 0; height: var(--opp-h); transition: transform .18s; }
+/* Versteigerer im Scheinwerferlicht (Lichtellipse kleiner als ihr Rechteck -> keine Kanten) */
+.seat.spot { z-index: 1; }
+.seat.spot::before, #me-plate.spot::before {
+  content: ""; position: absolute; left: 50%; pointer-events: none; z-index: -1; animation: spot 2.6s ease-in-out infinite;
+}
+.seat.spot::before {
+  top: -60px; width: 520px; height: 360px; transform: translateX(-50%);
+  background: radial-gradient(ellipse 230px 125px at 50% 170px,
+    rgba(255,240,190,.55) 0%, rgba(255,236,170,.30) 40%, rgba(255,236,170,.10) 72%, rgba(255,236,170,0) 100%);
+}
+#me-plate.spot::before {
+  top: 50%; width: 560px; height: 340px; transform: translate(-50%, -50%);
+  background: radial-gradient(ellipse 240px 130px at 50% 50%,
+    rgba(255,240,190,.5) 0%, rgba(255,236,170,.28) 40%, rgba(255,236,170,.09) 72%, rgba(255,236,170,0) 100%);
+}
+@keyframes spot { 50% { opacity: .8; } }
+
+/* Auslage: Geld als grober Fächer, Tiere pro Art als Stapel */
+.mini-money { position: relative; height: 62px; flex: none; }
+.mini-money .broke { font-size: 11px; color: rgba(247,239,220,.7); position: absolute; top: 22px; left: 2px; }
+.seat-cards { position: relative; margin-top: 10px; display: flex; gap: 14px; align-items: flex-end; }
+.opp-animals { position: relative; height: calc(var(--opp-h) + 8px); transition: width .3s ease, height .3s ease; }
+.no-animals { color: rgba(247,239,220,.75); font-size: 14px; padding: 0 8px 50px; white-space: nowrap; }
+.ogroup { position: absolute; height: var(--opp-h); transition: left .3s ease, top .3s ease, transform .18s; }
 .ogroup > .cnt { left: -7px; top: -9px; min-width: 22px; height: 22px; font-size: 12px; padding: 0 4px; }
 .ogroup:hover { z-index: 50 !important; transform: translateY(-10px) scale(1.25); }
 .ogroup.pick { cursor: pointer; }
+.ogroup.pick:hover { z-index: 100 !important; }
 .ogroup.pick .card { animation: pickglow 1.1s ease-in-out infinite; }
 .ogroup.pick::after {
   content: "⚔️"; position: absolute; left: 14px; top: -12px; z-index: 21; font-size: 18px;
   filter: drop-shadow(0 2px 2px rgba(0,0,0,.6));
 }
+.ogroup.pick:hover::before {
+  content: "⚔ Herausfordern"; position: absolute; left: 50%; top: -30px; transform: translateX(-50%) scale(.8); z-index: 30;
+  background: var(--gold); color: var(--wood); border: 2px solid var(--wood); border-radius: 99px; padding: 1px 10px;
+  font-size: 13px; font-weight: 700; white-space: nowrap; box-shadow: 0 3px 8px rgba(0,0,0,.4);
+}
 @keyframes pickglow { 50% { box-shadow: 0 0 0 3px var(--gold), 0 0 18px 5px rgba(245,197,66,.8); } }
-.opp-money { position: relative; height: var(--opp-h); }
-.no-animals { color: rgba(247,239,220,.75); font-size: 14px; padding: 0 8px 50px; white-space: nowrap; }
-.opp-money .label { position: absolute; left: 0; right: 0; bottom: -20px; text-align: center; font-size: 12px; color: rgba(247,239,220,.8); }
 
 /* ================================================================ Mitte */
 #center { position: absolute; left: 800px; top: 296px; transform: translateX(-50%); display: flex; align-items: center; gap: 44px; }
 #pile-area { position: relative; width: calc(var(--mid-w) + 44px); height: calc(var(--mid-h) + 26px); }
 #pile-area.hidden { display: none; }
 #deck { position: absolute; left: 0; top: 12px; }
+#deck-count {
+  position: absolute; left: 50%; top: -34px; transform: translateX(-50%); white-space: nowrap;
+  font-size: 14px; color: var(--paper); background: rgba(0,0,0,.4); padding: 2px 12px; border-radius: 99px;
+}
 #revealed { position: absolute; left: 30px; top: -2px; perspective: 1000px; }
 #revealed .flip { position: relative; width: var(--mid-w); height: var(--mid-h); transform-style: preserve-3d; transform: rotate(4deg); }
 #revealed .flip.in { animation: flipin .7s cubic-bezier(.25,.8,.3,1); }
@@ -134,10 +180,20 @@ button { font-family: inherit; cursor: pointer; }
   45% { transform: translate(-10px, -26px) rotateY(90deg) rotate(1deg) scale(1.08); }
   100% { transform: rotate(4deg); }
 }
-#deck-count {
-  position: absolute; left: 50%; bottom: -30px; transform: translateX(-50%); white-space: nowrap;
-  font-size: 14px; color: var(--paper); background: rgba(0,0,0,.4); padding: 2px 12px; border-radius: 99px;
-}
+/* Kuhhandel in der Mitte: Karten beider Beteiligten */
+#revealed .tcards { position: relative; }
+#revealed .tcard { box-shadow: 0 2px 3px rgba(0,0,0,.35), 0 10px 20px rgba(0,0,0,.4); }
+#revealed .tname { position: absolute; top: calc(var(--mid-h) + 14px); white-space: nowrap;
+  background: rgba(0,0,0,.5); color: var(--paper); font-size: 13px; font-weight: 600; padding: 1px 9px; border-radius: 99px; }
+#revealed .tname.l { left: 0; }
+/* Verdeckter Geldstapel auf dem Tisch */
+.tstack { position: absolute; left: calc(100% + 18px); top: 20px; width: 110px; height: 140px; cursor: help; }
+.tstack .card { width: 64px; height: 96px; }
+.tstack .lab { position: absolute; left: 0; right: 0; top: 108px; text-align: center; font-size: 13px; color: var(--paper);
+  background: rgba(0,0,0,.45); border-radius: 99px; padding: 1px 8px; opacity: 0; transition: opacity .15s; white-space: nowrap; }
+.tstack:hover .lab { opacity: 1; }
+.tstack:hover .card { transform: translateY(-4px); }
+
 #plaque { width: 250px; padding: 12px 14px; text-align: center; }
 #plaque .lbl { font-size: 12px; text-transform: uppercase; letter-spacing: 1.3px; color: var(--ink-soft); font-weight: 600; }
 #plaque .amt { font-family: "Lilita One"; font-size: 50px; line-height: 1.05; color: var(--gold);
@@ -146,26 +202,26 @@ button { font-family: inherit; cursor: pointer; }
 @keyframes bump { 40% { transform: scale(1.22); } }
 #plaque .who { font-weight: 600; font-size: 16px; }
 #plaque hr { border: none; border-top: 2px dashed #d9c79f; margin: 8px 0; }
-#plaque .history { font-size: 13px; color: var(--ink-soft); margin-top: 6px; line-height: 1.5; }
+#plaque .history { font-size: 13px; color: var(--ink-soft); margin-top: 6px; line-height: 1.5; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 #plaque .history b { color: var(--ink); }
-#plaque .stackline { position: relative; height: 60px; margin: 8px auto 0; }
 .pill { display: inline-block; padding: 1px 10px; border-radius: 99px; font-size: 14px; font-weight: 600; }
-.pill.auct { background: #e3bf94; } .pill.high { background: var(--gold); } .pill.out { background: #efb3ab; }
+.pill.auct { background: #e3bf94; display: inline-flex; align-items: center; gap: 4px; }
+.pill.high { background: var(--gold); }
+.pill.out { background: #efb3ab; }
 
 /* ================================================================ Eigener Bereich */
 #wallet { position: absolute; left: 86px; bottom: 60px; width: 520px; height: 200px; }
 .mstack { position: absolute; bottom: 0; width: var(--own-w); height: var(--own-h); transition: transform .16s; }
 .mstack:hover { transform: translateY(-14px); z-index: 30 !important; }
-.mstack > .cnt { right: -8px; top: -12px; }
+.mstack > .cnt { left: 34px; top: -13px; }   /* im nicht überdeckten Streifen */
 .mstack.selectable { cursor: pointer; }
 .mstack.selectable:hover .card:last-of-type { box-shadow: 0 0 0 3px var(--gold), 0 8px 18px rgba(0,0,0,.4); }
 .mstack.empty { opacity: .35; }
-#wallet .sum { position: absolute; left: 0; bottom: -34px; font-size: 14px; color: var(--paper); }
-#wallet .sum b { font-family: "Lilita One"; color: var(--gold); font-weight: 400; font-size: 17px; }
 
 #offer-pile { position: absolute; left: 86px; bottom: 262px; width: 520px; height: 190px; display: none; }
 #offer-pile.show { display: block; }
-#offer-pile .title { position: absolute; left: 0; top: -6px; color: var(--paper); font-size: 14px; background: rgba(0,0,0,.45); padding: 2px 12px; border-radius: 99px; }
+#offer-pile .title { position: absolute; left: 0; top: -6px; max-width: 380px; color: var(--paper); font-size: 14px;
+  background: rgba(0,0,0,.45); padding: 2px 12px; border-radius: 99px; }
 #offer-pile .title b { font-family: "Lilita One"; color: var(--gold); font-weight: 400; font-size: 17px; }
 #offer-pile .card { cursor: pointer; transition: transform .15s; }
 #offer-pile .card:hover { transform: translateY(-10px); }
@@ -179,27 +235,67 @@ button { font-family: inherit; cursor: pointer; }
 .hgroup .name { position: absolute; left: 22px; top: -12px; z-index: 21; background: var(--paper); border: 2px solid var(--wood);
   border-radius: 99px; padding: 0 8px; font-size: 13px; font-weight: 600; display: none; white-space: nowrap; }
 .hgroup:hover .name { display: block; }
-.hgroup.pick .card { box-shadow: 0 0 0 3px var(--gold), 0 0 16px 3px rgba(245,197,66,.55), 0 6px 14px rgba(0,0,0,.3); }
+.hgroup.pick > .card { box-shadow: 0 0 0 3px var(--gold), 0 0 16px 3px rgba(245,197,66,.55), 0 6px 14px rgba(0,0,0,.3); }
 .hgroup.target .card { animation: redpulse 1s ease-in-out infinite; }
 @keyframes redpulse { 50% { box-shadow: 0 0 0 4px #e0584f, 0 0 20px 6px rgba(224,88,79,.6); } }
 .hand-empty { position: absolute; right: 150px; bottom: 70px; color: rgba(247,239,220,.75); font-size: 15px; }
 
-#me-plate { position: absolute; left: 800px; bottom: 64px; transform: translateX(-50%); display: flex; align-items: center; gap: 12px; }
+/* Kuhhandel: Gegner kommen hinter der eigenen Karte hervor */
+.hgroup .pops { position: absolute; left: 0; right: 0; bottom: 0; height: 100%; z-index: 0; pointer-events: none; transform: translateX(var(--shift, 0px)); }
+.hgroup:hover .pops { pointer-events: auto; }
+.pop {
+  position: absolute; left: 50%; bottom: 36px; width: 120px; height: 150px; margin-left: -60px; z-index: 0;
+  background: var(--paper); border: 3px solid var(--wood); border-radius: 10px; text-align: center; padding-top: 8px;
+  box-shadow: 0 6px 16px rgba(0,0,0,.45); transform-origin: 50% 100%;
+  transform: rotate(var(--ang)) translateY(0) scale(.7); opacity: 0;
+  transition: transform .25s cubic-bezier(.2,.9,.3,1.2), opacity .18s; transition-delay: 0s;
+}
+.hgroup:hover .pop { transform: rotate(var(--ang)) translateY(-158px) scale(1); opacity: 1; transition-delay: var(--d); }
+.pop .avatar { width: 40px; height: 40px; margin: 0 auto; border-width: 2px; box-shadow: 0 0 0 2px var(--wood); }
+.pop .pn { font-weight: 600; font-size: 15px; margin-top: 3px; line-height: 1.1; }
+.pop .pc { font-size: 14px; color: var(--ink-soft); }
+.pop .pc b { font-family: "Lilita One"; font-size: 18px; color: var(--ink); font-weight: 400; }
+.pop .pa { font-size: 13px; font-weight: 700; color: var(--wood); }
+.pop.active { cursor: pointer; background: #fff6d6; border-color: var(--gold-dark); }
+.pop.active:hover { background: var(--gold); }
+.pop.info { height: 120px; padding-top: 16px; }
+.pop.info .pn { font-size: 13px; color: var(--ink-soft); }
+
+/* Eigenes Spielerschild (sitzt per JS direkt auf dem Aktionsfeld) */
+#me-plate { position: absolute; left: 800px; bottom: 64px; transform: translateX(-50%); display: flex; align-items: center; gap: 12px; z-index: 7; }
 #me-plate .avatar-wrap { width: 70px; height: 70px; }
 #me-plate .bubble { left: calc(100% + 12px); }
 .chips { display: flex; gap: 6px; margin-top: 3px; }
-.chip { background: rgba(0,0,0,.28); border-radius: 99px; padding: 1px 9px; font-size: 13px; white-space: nowrap; }
-.chip b { font-family: "Lilita One"; color: var(--gold); font-weight: 400; font-size: 15px; }
+.chip { background: rgba(0,0,0,.28); border-radius: 99px; padding: 1px 9px; font-size: 14px; white-space: nowrap; }
+.chip b { font-family: "Lilita One"; color: var(--gold); font-weight: 400; font-size: 16px; }
 
-/* ================================================================ Aktionen */
-#actions { position: absolute; left: 800px; bottom: 170px; transform: translateX(-50%); width: 480px; padding: 14px 18px 16px; text-align: center; }
+/* ================================================================ Aktionsfeld (ganz unten) */
+#actions {
+  position: absolute; left: 800px; bottom: 58px; transform: translateX(-50%); z-index: 6;
+  width: 440px; min-height: 136px; padding: 10px 14px 12px; text-align: center;
+  display: flex; flex-direction: column; justify-content: center;
+}
 #actions.mine { animation: mine 1.6s ease-in-out infinite; }
 @keyframes mine { 50% { box-shadow: inset 0 0 0 2px var(--paper-2), 0 0 0 4px rgba(245,197,66,.7), 0 0 30px 6px rgba(245,197,66,.45); } }
-#actions h4 { margin: 0 0 10px; font-size: 18px; font-weight: 600; }
-#actions .hint { font-size: 13.5px; color: var(--ink-soft); margin-top: 8px; }
+#actions h4 { margin: 0 0 8px; font-size: 18px; font-weight: 600; }
+#actions .hint { font-size: 14px; color: var(--ink-soft); margin-top: 6px; }
 #actions .warn { color: #b3342f; font-weight: 600; }
 #actions .waiting { font-size: 17px; color: var(--ink-soft); padding: 6px 0; }
+#actions .ctx { font-size: 15px; font-weight: 500; color: var(--ink-soft); }
+#actions .ctx b { color: var(--ink); font-size: 18px; font-weight: 400; }
+#actions .ctx.redo { display: block; margin: -4px 0 8px; color: #b3342f; font-weight: 600; }
+.perr {
+  position: absolute; left: 50%; top: -44px; transform: translateX(-50%); white-space: nowrap; z-index: 5;
+  background: #b3342f; color: #fff; padding: 5px 14px; border-radius: 99px; font-size: 15px; font-weight: 600;
+  box-shadow: 0 4px 12px rgba(0,0,0,.4); animation: pop .25s ease-out;
+}
 .btns { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; align-items: center; }
+.btns.bidrow { flex-wrap: nowrap; gap: 6px; }
+.btns.bidrow .btn { padding: 7px 12px; white-space: nowrap; }
+.btns.bidrow #bgo { min-width: 86px; }
+.btns.quick { margin-top: 8px; flex-wrap: nowrap; gap: 6px; }
+.btns.quick .btn { min-width: 0; padding: 4px 10px; font-size: 14px; white-space: nowrap; }
+.btns.quick .btn b { font-size: 15px; margin-left: 3px; }
 .btn {
   border: 2.5px solid var(--wood); border-radius: 12px; padding: 7px 16px; font-size: 16px; font-weight: 600;
   background: #fffaf0; color: var(--ink); box-shadow: 0 4px 0 var(--wood); transition: transform .08s;
@@ -209,19 +305,58 @@ button { font-family: inherit; cursor: pointer; }
 .btn.primary { background: var(--gold); }
 .btn.go { background: #7cc47f; }
 .btn.danger { background: #ef9f96; }
-.btn.small { padding: 4px 10px; font-size: 14px; border-width: 2px; box-shadow: 0 3px 0 var(--wood); }
+.btn.bluff { background: #f7c9c3; border-color: #b3342f; box-shadow: 0 4px 0 #b3342f; }
+.btn.small { padding: 6px 12px; font-size: 15px; border-width: 2px; box-shadow: 0 3px 0 var(--wood); }
+.btn small { font-size: 11px; opacity: .6; margin-left: 4px; }   /* Tastenkürzel */
 .btn:disabled { opacity: .4; cursor: not-allowed; transform: none; }
 .bid-input {
-  width: 110px; font-family: "Lilita One"; font-size: 28px; text-align: center; border-radius: 12px;
+  width: 100px; font-family: "Lilita One"; font-size: 26px; text-align: center; border-radius: 12px;
   border: 3px solid var(--wood); padding: 2px 4px; background: #fff; color: var(--ink);
 }
 .bid-input::-webkit-inner-spin-button { display: none; }
-.opt-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
-#actions.wide { width: 640px; }
-.opt { font-size: 13px !important; padding: 3px 6px !important; white-space: nowrap; overflow: hidden; }
-.opt { display: inline-flex; align-items: center; gap: 6px; justify-content: flex-start; }
-.opt i { width: 20px; height: 30px; border-radius: 2px; background: center / cover; display: inline-block; flex: none; }
 .dots::after { content: "…"; }
+
+/* ================================================================ Phase 2 (Kuhhandel): andere Aufteilung */
+#stage.p2 #center { top: 300px; gap: 140px; }
+#stage.p2 #pile-area { --mid-w: 104px; --mid-h: 156px; width: 250px; }
+#stage.p2 #hand { width: 500px; }
+#stage.p2 #wallet { width: 470px; }
+#stage.p2 #actions { padding: 10px 16px 12px; }
+#stage.p2 #actions h4 { margin-bottom: 6px; }
+#stage.p2 #offer-pile { height: 150px; }
+#stage.p2 #offer-pile .card { width: 84px !important; height: 126px !important; }
+#stage.p2 #toasts { top: 470px; }
+/* Aktionsfeld zurücknehmen, solange Gegner-Karten hinter der eigenen Karte zu sehen sind */
+#stage:has(#hand .hgroup:hover .pop) #actions { opacity: .25; transition: opacity .15s; }
+
+/* ================================================================ Abdunkeln mit bis zu zwei Lichtkegeln */
+@property --sx { syntax: "<length>"; inherits: false; initial-value: 800px; }
+@property --sy { syntax: "<length>"; inherits: false; initial-value: 400px; }
+@property --rx { syntax: "<length>"; inherits: false; initial-value: 220px; }
+@property --ry { syntax: "<length>"; inherits: false; initial-value: 160px; }
+@property --s2x { syntax: "<length>"; inherits: false; initial-value: 800px; }
+@property --s2y { syntax: "<length>"; inherits: false; initial-value: 400px; }
+@property --r2x { syntax: "<length>"; inherits: false; initial-value: 220px; }
+@property --r2y { syntax: "<length>"; inherits: false; initial-value: 160px; }
+#dim {
+  position: absolute; inset: 0; z-index: 50; pointer-events: none; opacity: 0;
+  background: rgba(6,3,1,.66);
+  -webkit-mask-image:
+    radial-gradient(ellipse var(--rx) var(--ry) at var(--sx) var(--sy), transparent 0%, transparent 58%, #000 100%),
+    radial-gradient(ellipse var(--r2x) var(--r2y) at var(--s2x) var(--s2y), transparent 0%, transparent 58%, #000 100%);
+  -webkit-mask-composite: source-in;
+  mask-image:
+    radial-gradient(ellipse var(--rx) var(--ry) at var(--sx) var(--sy), transparent 0%, transparent 58%, #000 100%),
+    radial-gradient(ellipse var(--r2x) var(--r2y) at var(--s2x) var(--s2y), transparent 0%, transparent 58%, #000 100%);
+  mask-composite: intersect;
+  transition: opacity .35s ease,
+    --sx .65s cubic-bezier(.4,.1,.2,1), --sy .65s cubic-bezier(.4,.1,.2,1), --rx .65s, --ry .65s,
+    --s2x .65s cubic-bezier(.4,.1,.2,1), --s2y .65s cubic-bezier(.4,.1,.2,1), --r2x .65s, --r2y .65s;
+}
+#dim.on { opacity: 1; }
+#dim.soft.on { opacity: .6; }   /* dezenter beim Aufdecken einer neuen Versteigerungskarte */
+#stage.focusing #hand { z-index: 61; }
+#stage.focusing #actions { opacity: .25; }
 
 /* ================================================================ Meldungen */
 #toasts {
@@ -233,8 +368,10 @@ button { font-family: inherit; cursor: pointer; }
   font-size: 15px; box-shadow: 0 4px 12px rgba(0,0,0,.4); animation: toast 4.2s forwards; max-width: 460px;
 }
 @keyframes toast { 0% { opacity: 0; transform: translateX(20px); } 7%, 85% { opacity: 1; transform: none; } 100% { opacity: 0; } }
+/* Banner liegt außerhalb der Bühne, damit er über fliegenden Karten erscheint */
+#banner-wrap { position: fixed; left: 50%; top: 42%; z-index: 800; pointer-events: none; transform-origin: 50% 50%; }
 #banner {
-  position: absolute; left: 50%; top: 380px; transform: translate(-50%, -50%); z-index: 80; pointer-events: none;
+  position: relative; pointer-events: none;
   min-width: 520px; max-width: 760px; padding: 18px 30px; text-align: center; display: none;
   background: var(--paper); border: 4px solid var(--wood); border-radius: 20px;
   box-shadow: inset 0 0 0 3px var(--gold), 0 20px 60px rgba(0,0,0,.6);
@@ -244,22 +381,78 @@ button { font-family: inherit; cursor: pointer; }
 #banner .d { font-size: 18px; margin-top: 4px; }
 #banner.bad .t { color: #ef6f63; }
 @keyframes banner {
-  0% { transform: translate(-50%, -50%) scale(.6); opacity: 0; }
-  14% { transform: translate(-50%, -50%) scale(1.05); opacity: 1; }
-  22% { transform: translate(-50%, -50%) scale(1); }
+  0% { transform: scale(.6); opacity: 0; }
+  14% { transform: scale(1.05); opacity: 1; }
+  22% { transform: scale(1); }
   85% { opacity: 1; }
-  100% { opacity: 0; transform: translate(-50%, -50%) scale(.97); }
+  100% { opacity: 0; transform: scale(.97); }
 }
 .shake { animation: shake .5s; }
 @keyframes shake { 20%, 60% { transform: translateX(-7px); } 40%, 80% { transform: translateX(7px); } }
+.scorepop {
+  position: fixed; z-index: 900; transform: translate(-50%, -100%); pointer-events: none;
+  color: #7cc47f; -webkit-text-stroke: 2px var(--wood); paint-order: stroke fill; text-shadow: 0 3px 0 rgba(0,0,0,.3);
+  animation: scorepop 1.9s ease-out forwards;
+}
+@keyframes scorepop { 0% { opacity: 0; transform: translate(-50%, -60%) scale(.6); } 15% { opacity: 1; transform: translate(-50%, -110%) scale(1.1); }
+  80% { opacity: 1; transform: translate(-50%, -190%) scale(1); } 100% { opacity: 0; transform: translate(-50%, -230%); } }
+.confetti { position: fixed; inset: 0; z-index: 1050; pointer-events: none; }
 
-/* ================================================================ Knöpfe / Log */
+/* ================================================================ Aufdeck-Szene */
+.reveal {
+  position: absolute; left: 800px; top: 250px; transform: translateX(-50%); z-index: 70;
+  background: rgba(24,14,7,.96); border: 3px solid var(--gold); border-radius: 22px; padding: 16px 28px 18px;
+  box-shadow: 0 20px 60px rgba(0,0,0,.6); color: var(--paper); text-align: center; min-width: 520px;
+  animation: revealin .35s ease-out; transition: opacity .3s, transform .3s;
+}
+@keyframes revealin { from { opacity: 0; transform: translateX(-50%) scale(.85); } }
+.reveal.out { opacity: 0; transform: translateX(-50%) scale(.95); }
+.reveal.win { border-color: #7cc47f; box-shadow: 0 0 0 4px rgba(124,196,127,.4), 0 20px 60px rgba(0,0,0,.6); }
+.reveal.lose { border-color: #ef6f63; box-shadow: 0 0 0 4px rgba(239,111,99,.35), 0 20px 60px rgba(0,0,0,.6); }
+.reveal .rtitle { font-family: "Lilita One"; font-size: 30px; color: var(--gold); -webkit-text-stroke: 1.5px var(--wood); paint-order: stroke fill; }
+.reveal .rrow { display: flex; align-items: center; justify-content: center; gap: 30px; margin-top: 10px; }
+.reveal .rside { display: flex; flex-direction: column; align-items: center; gap: 6px; min-width: 200px; }
+.reveal .rwho { font-weight: 600; font-size: 17px; }
+.reveal .rhint { font-size: 12px; opacity: .7; font-weight: 400; }
+.reveal .rmid { display: flex; flex-direction: column; align-items: center; gap: 8px; min-width: 120px; }
+.reveal .rvs { font-family: "Lilita One"; font-size: 22px; opacity: .8; }
+.reveal .rcards { position: relative; height: 130px; display: flex; align-items: center; justify-content: center; }
+.reveal .rempty { opacity: .6; font-size: 14px; }
+.reveal .rc { width: 76px; height: 114px; perspective: 600px; position: relative; flex: none; }
+.reveal .rc + .rc { margin-left: -44px; }
+.reveal .rc.up { z-index: 2; }
+.reveal .rf { position: absolute; inset: 0; border-radius: 6px; background: center / cover; backface-visibility: hidden;
+  box-shadow: 0 4px 10px rgba(0,0,0,.5); transition: transform .45s cubic-bezier(.3,.7,.2,1); }
+.reveal .rc.still .rf { transition: none; }   /* eigene Karten liegen ohne Dreh-Animation offen */
+.reveal .rb { background-image: url("assets/web/rueckseite_geld.webp"); }
+.reveal .rfront { transform: rotateY(180deg); }
+.reveal .rc.up .rb { transform: rotateY(-180deg); }
+.reveal .rc.up .rfront { transform: rotateY(0deg); }
+.reveal .rsum { font-size: 40px; color: var(--gold); -webkit-text-stroke: 1.5px var(--wood); paint-order: stroke fill; }
+.reveal .rsum.bump { animation: bump .3s ease-out; }
+.reveal .rdelta { font-size: 46px; line-height: 1; opacity: 0; transform: scale(.4); }
+.reveal .rdelta.good, .reveal .rdelta.bad { animation: deltain .45s cubic-bezier(.2,.9,.3,1.3) forwards; }
+.reveal .rdelta.good { color: #7cc47f; -webkit-text-stroke: 1.5px #173d1b; paint-order: stroke fill; }
+.reveal .rdelta.bad { color: #ef6f63; -webkit-text-stroke: 1.5px #4a130e; paint-order: stroke fill; }
+.reveal .rdelta small { display: block; font-family: "Fredoka"; font-size: 14px; font-weight: 600; -webkit-text-stroke: 0; margin-top: 4px; opacity: .9; }
+@keyframes deltain { to { opacity: 1; transform: scale(1); } }
+
+/* ================================================================ Knöpfe / Menü / Log */
 #top-buttons { position: absolute; right: 70px; top: 64px; z-index: 90; }
 .round {
   height: 42px; min-width: 42px; padding: 0 10px; border-radius: 99px; border: 3px solid var(--wood);
   background: var(--paper); font-size: 17px; font-weight: 600; color: var(--ink); box-shadow: 0 4px 10px rgba(0,0,0,.4);
 }
 .round.small { height: 34px; min-width: 34px; font-size: 15px; }
+#menu { position: absolute; right: 0; top: 52px; width: 290px; padding: 12px; display: none; flex-direction: column; gap: 6px; z-index: 96; }
+#menu.open { display: flex; }
+#menu .m-lbl { font-size: 12px; text-transform: uppercase; letter-spacing: 1.2px; color: var(--ink-soft); font-weight: 600; }
+#menu .seg { margin: 0 0 6px; gap: 5px; }
+#menu .seg button { font-size: 13px; padding: 6px 4px; }
+.m-item { display: block; text-align: left; padding: 8px 12px; border-radius: 10px; border: 2px solid var(--wood); background: #fffaf0;
+  font-size: 15px; font-weight: 600; color: var(--ink); text-decoration: none; font-family: inherit; }
+.m-item:hover { background: var(--gold); }
+.m-item.danger:hover { background: #ef9f96; }
 #log {
   position: absolute; right: 56px; top: 52px; bottom: 52px; width: 360px; z-index: 95;
   background: rgba(247,239,220,.98); color: var(--ink); border-left: 3px solid var(--wood);
@@ -274,7 +467,7 @@ button { font-family: inherit; cursor: pointer; }
 #log li.bad { color: #b3342f; font-weight: 600; }
 #log li.good { color: #7a5a00; font-weight: 600; }
 
-/* ================================================================ Overlay */
+/* ================================================================ Overlays: Start, Ergebnis, Regeln */
 #overlay { position: fixed; inset: 0; z-index: 1000; background: rgba(10,6,2,.72); display: none; place-items: center; backdrop-filter: blur(5px); }
 #overlay.show { display: grid; }
 .panel {
@@ -302,299 +495,13 @@ button { font-family: inherit; cursor: pointer; }
 .results .r { display: flex; justify-content: space-between; align-items: center; gap: 16px; padding: 7px 0; border-bottom: 2px dashed #d9c79f; font-size: 17px; }
 .results .r.win { font-weight: 700; }
 .results .r .num { color: var(--gold); -webkit-text-stroke: 1.5px var(--wood); paint-order: stroke fill; font-size: 22px; }
-
-/* ================================================================ Menü */
-#menu { position: absolute; right: 0; top: 52px; width: 290px; padding: 12px; display: none; flex-direction: column; gap: 6px; z-index: 96; }
-#menu.open { display: flex; }
-#menu .m-lbl { font-size: 12px; text-transform: uppercase; letter-spacing: 1.2px; color: var(--ink-soft); font-weight: 600; }
-#menu .seg { margin: 0 0 6px; gap: 5px; }
-#menu .seg button { font-size: 13px; padding: 6px 4px; }
-.m-item { display: block; text-align: left; padding: 8px 12px; border-radius: 10px; border: 2px solid var(--wood); background: #fffaf0;
-  font-size: 15px; font-weight: 600; color: var(--ink); text-decoration: none; font-family: inherit; }
-.m-item:hover { background: var(--gold); }
-.m-item.danger:hover { background: #ef9f96; }
-
-/* ================================================================ Gegner: Geld im Kopf, Tiere in Reihen */
-.mini-money { position: relative; height: 62px; flex: none; }
-.mini-money .broke { font-size: 11px; color: rgba(247,239,220,.7); position: absolute; top: 22px; left: 2px; }
-.opp-animals .ogroup { bottom: auto; }
-.seat-cards { margin-top: 10px; }
-
-/* Komplette Quartette: grüner Schimmer, eng gestapelt */
-.full .card { box-shadow: 0 0 0 2px #5fd47a, 0 0 14px 3px rgba(95,212,122,.55), 0 4px 10px rgba(0,0,0,.3) !important; }
-.full > .cnt { background: #3aa655 !important; color: #fff !important; border-color: var(--paper) !important; }
-
-/* ================================================================ Phase 2 (Kuhhandel) */
-#stage.p2 #center { top: 300px; gap: 150px; }
-#stage.p2 #pile-area { --mid-w: 104px; --mid-h: 156px; }
-#stage.p2 #hand { width: 880px; }
-#stage.p2 #me-plate { left: 86px; bottom: 236px; transform: none; }
-#stage.p2 #actions { bottom: 254px; padding: 10px 16px 12px; }
-#stage.p2 #actions h4 { margin-bottom: 6px; }
-#stage.p2 #offer-pile { bottom: 318px; height: 150px; }
-#stage.p2 #offer-pile .card { width: 84px !important; height: 126px !important; }
-#stage.p2 #toasts { top: 470px; }
-
-.hgroup .pops { position: absolute; left: 0; right: 0; bottom: 0; height: 100%; z-index: 0; pointer-events: none; }
-.hgroup:hover .pops { pointer-events: auto; }
-.pop {
-  position: absolute; left: 50%; bottom: 36px; width: 104px; height: 140px; margin-left: -52px; z-index: 0;
-  background: var(--paper); border: 3px solid var(--wood); border-radius: 10px; text-align: center; padding-top: 8px;
-  box-shadow: 0 6px 16px rgba(0,0,0,.45); transform-origin: 50% 100%;
-  transform: rotate(var(--ang)) translateY(0) scale(.7); opacity: 0;
-  transition: transform .25s cubic-bezier(.2,.9,.3,1.2), opacity .18s; transition-delay: 0s;
-}
-.hgroup:hover .pop { transform: rotate(var(--ang)) translateY(-158px) scale(1); opacity: 1; transition-delay: var(--d); }
-.pop .avatar { width: 40px; height: 40px; margin: 0 auto; border-width: 2px; box-shadow: 0 0 0 2px var(--wood); }
-.pop .pn { font-weight: 600; font-size: 14px; margin-top: 3px; line-height: 1.1; }
-.pop .pc { font-size: 13px; color: var(--ink-soft); }
-.pop .pc b { font-family: "Lilita One"; font-size: 18px; color: var(--ink); font-weight: 400; }
-.pop .pa { font-size: 11.5px; font-weight: 700; color: var(--wood); }
-.pop.active { cursor: pointer; background: #fff6d6; border-color: var(--gold-dark); }
-.pop.active:hover { background: var(--gold); }
-.pop.info { height: 120px; padding-top: 16px; }
-.pop.info .pn { font-size: 13px; color: var(--ink-soft); }
-.hgroup.pick > .card { box-shadow: 0 0 0 3px var(--gold), 0 0 16px 3px rgba(245,197,66,.55), 0 6px 14px rgba(0,0,0,.3); }
-
-/* Verdeckter Geldstapel auf dem Tisch */
-.tstack { position: absolute; left: calc(100% + 18px); top: 20px; width: 110px; height: 140px; cursor: help; }
-.tstack .card { width: 64px; height: 96px; }
-.tstack .lab { position: absolute; left: 0; right: 0; top: 108px; text-align: center; font-size: 13px; color: var(--paper);
-  background: rgba(0,0,0,.45); border-radius: 99px; padding: 1px 8px; opacity: 0; transition: opacity .15s; white-space: nowrap; }
-.tstack:hover .lab { opacity: 1; }
-.tstack:hover .card { transform: translateY(-4px); }
-
-/* Kuhhandel in der Mitte */
-#revealed .tcards { position: relative; }
-#revealed .tcard { box-shadow: 0 2px 3px rgba(0,0,0,.35), 0 10px 20px rgba(0,0,0,.4); }
-#revealed .tname { position: absolute; top: calc(var(--mid-h) + 14px); transform: translateX(0); white-space: nowrap;
-  background: rgba(0,0,0,.5); color: var(--paper); font-size: 13px; font-weight: 600; padding: 1px 9px; border-radius: 99px; }
-#revealed .tname.l { left: 0; }
-#stage.p2 #pile-area { width: 250px; }
-#stage.p2 #center { gap: 140px; }
-/* Anzahl bei Geldstapeln: sichtbar im nicht überdeckten Streifen */
-.mstack > .cnt { right: auto; left: 34px; top: -13px; }
-.ogroup.pick:hover::before {
-  content: "⚔ Herausfordern"; position: absolute; left: 50%; top: -30px; transform: translateX(-50%) scale(.8); z-index: 30;
-  background: var(--gold); color: var(--wood); border: 2px solid var(--wood); border-radius: 99px; padding: 1px 10px;
-  font-size: 13px; font-weight: 700; white-space: nowrap; box-shadow: 0 3px 8px rgba(0,0,0,.4);
-}
-
-/* Versteigerer: Hammer-Symbol und Scheinwerfer */
-.gavel { width: 18px; height: 18px; vertical-align: -3px; }
-.badge.auct { background: var(--paper); }
-.badge.auct .gavel { width: 20px; height: 20px; }
-.pill.auct { display: inline-flex; align-items: center; gap: 4px; }
-.nameplate .role { display: inline-flex; align-items: center; gap: 3px; margin-left: 8px; padding: 0 8px; border-radius: 99px;
-  background: var(--gold); color: var(--wood); font-size: 12px; font-weight: 700; vertical-align: 2px; }
-.nameplate .role .gavel { width: 14px; height: 14px; }
-.seat.spot::before, #me-plate.spot::before {
-  content: ""; position: absolute; left: 50%; top: 50%; width: 420px; height: 300px; transform: translate(-50%, -46%);
-  background: radial-gradient(ellipse at 50% 45%, rgba(255,240,190,.55) 0%, rgba(255,236,170,.30) 32%, rgba(255,236,170,.10) 55%, rgba(255,236,170,0) 70%);
-  pointer-events: none; z-index: -1; animation: spot 2.6s ease-in-out infinite;
-}
-.seat.spot { z-index: 1; }
-@keyframes spot { 50% { opacity: .8; } }
-/* rechte Gegner: Sprechblase links vom Kopf, damit sie nicht über den Rand ragt */
-.seat.rside .bubble { left: auto; right: calc(100% + 12px); }
-.seat.rside .bubble::before { left: auto; right: -11px; border-right: 0; border-left: 8px solid var(--wood); }
-/* Stapel-Beschriftung über dem Stapel statt unter dem Gebotsfeld */
-#deck-count { bottom: auto; top: -34px; }
-
-/* ---- Aktionsfeld: Kontext, Schnellwahl, Fehler, Größen ---- */
-#actions { width: 520px; }
-#actions h4 { font-size: 19px; }
-#actions .hint { font-size: 15px; }
-#actions .ctx { font-size: 15px; font-weight: 500; color: var(--ink-soft); }
-#actions .ctx.redo { display: block; margin: -4px 0 8px; }
-#actions .ctx b { color: var(--ink); font-size: 18px; font-weight: 400; }
-#actions .ctx.redo { color: #b3342f; font-weight: 600; margin-top: -4px; }
-.btn.small { padding: 6px 12px; font-size: 15px; }
-.btns.quick { margin-top: 8px; }
-.btns.quick .btn { min-width: 70px; }
-.btns.quick .btn small { font-family: "Lilita One"; font-size: 13px; opacity: .75; }
-.btn small { font-size: 11px; opacity: .6; margin-left: 4px; }
-.btn.bluff { background: #f7c9c3; border-color: #b3342f; box-shadow: 0 4px 0 #b3342f; }
-.bid-input { width: 130px; }
-.perr {
-  position: absolute; left: 50%; top: -44px; transform: translateX(-50%); white-space: nowrap; z-index: 5;
-  background: #b3342f; color: #fff; padding: 5px 14px; border-radius: 99px; font-size: 15px; font-weight: 600;
-  box-shadow: 0 4px 12px rgba(0,0,0,.4); animation: pop .25s ease-out;
-}
-.chip { font-size: 14px; }
-.chip b { font-size: 16px; }
-
-/* ---- Phase 2: Gegner hinter eigener Karte größer, im Tisch bleiben, Panel beim Hover zurücknehmen ---- */
-.hgroup .pops { transform: translateX(var(--shift, 0px)); }
-.pop { width: 120px; height: 150px; margin-left: -60px; }
-.pop .pn { font-size: 15px; }
-.pop .pc { font-size: 14px; }
-.pop .pa { font-size: 13px; }
-#stage:has(#hand .hgroup:hover .pop) #actions { opacity: .25; transition: opacity .15s; }
-
-/* ---- Phase 2: Abstände unten links ---- */
-#stage.p2 #me-plate { bottom: 250px; }
-#stage.p2 #wallet { width: 520px; }
-#offer-pile .title { max-width: 380px; white-space: normal; }
-
-/* ---- Markierte Gegnerkarten ganz klickbar (liegen über den Nachbarn) ---- */
-
-#plaque .history { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-
-/* ================================================================ Unten: Aktionsfeld ganz unten, Spielerschild darüber */
-#actions { top: auto !important; bottom: 58px !important; width: 440px; padding: 10px 14px 12px; z-index: 6; }
-#actions h4 { font-size: 18px; margin-bottom: 8px; }
-#actions .hint { margin-top: 6px; }
-#me-plate { left: 800px !important; transform: translateX(-50%) !important; z-index: 7; }
-#me-plate .bubble { left: calc(100% + 12px); }
-.btns.quick { flex-wrap: nowrap; gap: 6px; }
-.btns.quick .btn { min-width: 0; padding: 4px 10px; font-size: 14px; white-space: nowrap; }
-.btns.quick .btn b { font-size: 15px; margin-left: 3px; }
-.bid-input { width: 100px; font-size: 26px; }
-#stage.p2 #hand { width: 500px; }
-#stage.p2 #wallet { width: 470px; }
-#stage.p2 #offer-pile { bottom: 262px; }
-/* Markierte Gegnerkarten: nur beim Überfahren nach vorn, sonst normale Reihenfolge */
-.ogroup.pick { z-index: auto; }
-.ogroup.pick:hover { z-index: 100 !important; }
-/* Scheinwerfer der Gegner: Lichtmitte unter dem Kopf, nach oben früh auslaufend (kein harter Schnitt am Rand) */
-.seat.spot::before {
-  top: -10px; transform: translateX(-50%); width: 460px; height: 320px;
-  background: radial-gradient(ellipse 230px 125px at 50% 110px,
-    rgba(255,240,190,.55) 0%, rgba(255,236,170,.30) 40%, rgba(255,236,170,.10) 72%, rgba(255,236,170,0) 100%);
-}
-/* Aktionsfeld mit fester Mindesthöhe, damit das Spielerschild beim Zugwechsel nicht springt */
-#actions { min-height: 136px; display: flex; flex-direction: column; justify-content: center; }
-
-/* Gebotszeile immer einzeilig: −10 · Feld · +10 · Bieten/Bluffen · Passen */
-.btns.bidrow { flex-wrap: nowrap; gap: 6px; }
-.btns.bidrow .btn { padding: 7px 12px; white-space: nowrap; }
-.btns.bidrow #bgo { min-width: 86px; }
-#actions .hint { font-size: 14px; }
-/* Lichtkegel: Rechteck größer als die Lichtellipse -> an allen Rändern exakt 0, keine Kanten */
-.seat.spot::before {
-  top: -60px; width: 520px; height: 360px;
-  background: radial-gradient(ellipse 230px 125px at 50% 170px,
-    rgba(255,240,190,.55) 0%, rgba(255,236,170,.30) 40%, rgba(255,236,170,.10) 72%, rgba(255,236,170,0) 100%);
-}
-#me-plate.spot::before {
-  width: 560px; height: 340px; transform: translate(-50%, -50%);
-  background: radial-gradient(ellipse 240px 130px at 50% 50%,
-    rgba(255,240,190,.5) 0%, rgba(255,236,170,.28) 40%, rgba(255,236,170,.09) 72%, rgba(255,236,170,0) 100%);
-}
-
-/* ================================================================ Banner über allem (auch über fliegenden Karten) */
-#banner-wrap { position: fixed; left: 50%; top: 42%; z-index: 800; pointer-events: none; transform-origin: 50% 50%; }
-#banner { position: relative !important; left: auto !important; top: auto !important; transform: none; }
-#banner.show { animation-name: banner2; }
-@keyframes banner2 {
-  0% { transform: scale(.6); opacity: 0; }
-  14% { transform: scale(1.05); opacity: 1; }
-  22% { transform: scale(1); }
-  85% { opacity: 1; }
-  100% { opacity: 0; transform: scale(.97); }
-}
-
-/* ================================================================ Aufdeck-Szene */
-.reveal {
-  position: absolute; left: 800px; top: 250px; transform: translateX(-50%); z-index: 70;
-  background: rgba(24,14,7,.96); border: 3px solid var(--gold); border-radius: 22px; padding: 16px 28px 18px;
-  box-shadow: 0 20px 60px rgba(0,0,0,.6); color: var(--paper); text-align: center; min-width: 520px;
-  animation: revealin .35s ease-out; transition: opacity .3s, transform .3s;
-}
-@keyframes revealin { from { opacity: 0; transform: translateX(-50%) scale(.85); } }
-.reveal.out { opacity: 0; transform: translateX(-50%) scale(.95); }
-.reveal .rtitle { font-family: "Lilita One"; font-size: 30px; color: var(--gold); -webkit-text-stroke: 1.5px var(--wood); paint-order: stroke fill; }
-.reveal .rrow { display: flex; align-items: center; justify-content: center; gap: 30px; margin-top: 10px; }
-.reveal .rside { display: flex; flex-direction: column; align-items: center; gap: 6px; min-width: 200px; }
-.reveal .rwho { font-weight: 600; font-size: 17px; }
-.reveal .rhint { font-size: 12px; opacity: .7; font-weight: 400; }
-.reveal .rvs { font-family: "Lilita One"; font-size: 22px; opacity: .8; }
-.reveal .rcards { position: relative; height: 130px; display: flex; align-items: center; justify-content: center; }
-.reveal .rempty { opacity: .6; font-size: 14px; }
-.reveal .rc { width: 76px; height: 114px; perspective: 600px; position: relative; flex: none; }
-.reveal .rc + .rc { margin-left: -44px; }
-.reveal .rf { position: absolute; inset: 0; border-radius: 6px; background: center / cover; backface-visibility: hidden;
-  box-shadow: 0 4px 10px rgba(0,0,0,.5); transition: transform .45s cubic-bezier(.3,.7,.2,1); }
-.reveal .rb { background-image: url("assets/web/rueckseite_geld.webp"); }
-.reveal .rfront { transform: rotateY(180deg); }
-.reveal .rc.up .rb { transform: rotateY(-180deg); }
-.reveal .rc.up .rfront { transform: rotateY(0deg); }
-.reveal .rc.up { z-index: 2; }
-.reveal .rsum { font-size: 40px; color: var(--gold); -webkit-text-stroke: 1.5px var(--wood); paint-order: stroke fill; }
-.reveal .rsum.bump { animation: bump .3s ease-out; }
-.reveal.win { border-color: #7cc47f; box-shadow: 0 0 0 4px rgba(124,196,127,.4), 0 20px 60px rgba(0,0,0,.6); }
-.reveal.lose { border-color: #ef6f63; box-shadow: 0 0 0 4px rgba(239,111,99,.35), 0 20px 60px rgba(0,0,0,.6); }
-
-/* ================================================================ Quartett-Punkte, Regeln, Konfetti, Ergebnis */
-.scorepop {
-  position: fixed; z-index: 900; transform: translate(-50%, -100%); pointer-events: none;
-  color: #7cc47f; -webkit-text-stroke: 2px var(--wood); paint-order: stroke fill; text-shadow: 0 3px 0 rgba(0,0,0,.3);
-  animation: scorepop 1.9s ease-out forwards;
-}
-@keyframes scorepop { 0% { opacity: 0; transform: translate(-50%, -60%) scale(.6); } 15% { opacity: 1; transform: translate(-50%, -110%) scale(1.1); }
-  80% { opacity: 1; transform: translate(-50%, -190%) scale(1); } 100% { opacity: 0; transform: translate(-50%, -230%); } }
+.results .rname { display: flex; flex-direction: column; gap: 4px; }
+.results .qrow { display: flex; gap: 4px; }
+.results .qrow em { font-size: 12px; opacity: .6; font-style: normal; }
+.results .qi { width: 22px; height: 33px; border-radius: 3px; background: center / cover; box-shadow: 0 1px 3px rgba(0,0,0,.35); display: inline-block; }
 .rules-ov { position: fixed; inset: 0; z-index: 1100; background: rgba(10,6,2,.72); display: grid; place-items: center; backdrop-filter: blur(4px); }
 .panel.rules { width: min(640px, 92vw); max-height: 86vh; overflow: auto; text-align: left; }
 .panel.rules h2 { font-family: "Lilita One"; font-weight: 400; margin: 0 0 6px; color: var(--wood); }
 .panel.rules h3 { margin: 14px 0 4px; }
 .panel.rules p, .panel.rules li { font-size: 15px; line-height: 1.45; }
 .panel.rules ul { padding-left: 20px; margin: 4px 0; }
-.confetti { position: fixed; inset: 0; z-index: 1050; pointer-events: none; }
-.results .rname { display: flex; flex-direction: column; gap: 4px; }
-.results .qrow { display: flex; gap: 4px; }
-.results .qrow em { font-size: 12px; opacity: .6; font-style: normal; }
-.results .qi { width: 22px; height: 33px; border-radius: 3px; background: center / cover; box-shadow: 0 1px 3px rgba(0,0,0,.35); display: inline-block; }
-
-/* ================================================================ Abdunkeln mit Scheinwerfer */
-@property --sx { syntax: "<length>"; inherits: false; initial-value: 800px; }
-@property --sy { syntax: "<length>"; inherits: false; initial-value: 400px; }
-@property --rx { syntax: "<length>"; inherits: false; initial-value: 220px; }
-@property --ry { syntax: "<length>"; inherits: false; initial-value: 160px; }
-#dim {
-  position: absolute; inset: 0; z-index: 50; pointer-events: none; opacity: 0;
-  background: radial-gradient(ellipse var(--rx) var(--ry) at var(--sx) var(--sy),
-    rgba(255,240,200,.07) 0%, rgba(0,0,0,0) 62%, rgba(6,3,1,.66) 100%);
-  transition: opacity .35s ease, --sx .65s cubic-bezier(.4,.1,.2,1), --sy .65s cubic-bezier(.4,.1,.2,1), --rx .65s, --ry .65s;
-}
-#dim.on { opacity: 1; }
-.seat { transition: left .3s ease, width .3s ease; }
-.seat .ogroup { transition: left .3s ease, top .3s ease, transform .18s; }
-.seat .opp-animals { transition: width .3s ease, height .3s ease; }
-.seat.focus { z-index: 60 !important; }
-#stage.focusing #hand { z-index: 61; }
-#stage.focusing #actions { opacity: .25; }
-
-/* ================================================================ Aufdecken: Ergebnis-Zahl in der Mitte */
-.reveal .rmid { display: flex; flex-direction: column; align-items: center; gap: 8px; min-width: 120px; }
-.reveal .rdelta { font-size: 46px; line-height: 1; opacity: 0; transform: scale(.4); }
-.reveal .rdelta.good, .reveal .rdelta.bad { animation: deltain .45s cubic-bezier(.2,.9,.3,1.3) forwards; }
-.reveal .rdelta.good { color: #7cc47f; -webkit-text-stroke: 1.5px #173d1b; paint-order: stroke fill; }
-.reveal .rdelta.bad { color: #ef6f63; -webkit-text-stroke: 1.5px #4a130e; paint-order: stroke fill; }
-.reveal .rdelta small { display: block; font-family: "Fredoka"; font-size: 14px; font-weight: 600; -webkit-text-stroke: 0; margin-top: 4px; opacity: .9; }
-@keyframes deltain { to { opacity: 1; transform: scale(1); } }
-
-/* eigene Karten in der Aufdeck-Szene liegen ohne Dreh-Animation offen */
-.reveal .rc.still .rf { transition: none; }
-/* dezentere Abdunklung beim Aufdecken einer neuen Versteigerungskarte */
-#dim.soft.on { opacity: .6; }
-
-/* ================================================================ Abdunkeln mit bis zu zwei Lichtkegeln (Maske) */
-@property --s2x { syntax: "<length>"; inherits: false; initial-value: 800px; }
-@property --s2y { syntax: "<length>"; inherits: false; initial-value: 400px; }
-@property --r2x { syntax: "<length>"; inherits: false; initial-value: 220px; }
-@property --r2y { syntax: "<length>"; inherits: false; initial-value: 160px; }
-#dim {
-  background: rgba(6,3,1,.66);
-  -webkit-mask-image:
-    radial-gradient(ellipse var(--rx) var(--ry) at var(--sx) var(--sy), transparent 0%, transparent 58%, #000 100%),
-    radial-gradient(ellipse var(--r2x) var(--r2y) at var(--s2x) var(--s2y), transparent 0%, transparent 58%, #000 100%);
-  -webkit-mask-composite: source-in;
-  mask-image:
-    radial-gradient(ellipse var(--rx) var(--ry) at var(--sx) var(--sy), transparent 0%, transparent 58%, #000 100%),
-    radial-gradient(ellipse var(--r2x) var(--r2y) at var(--s2x) var(--s2y), transparent 0%, transparent 58%, #000 100%);
-  mask-composite: intersect;
-  transition: opacity .35s ease,
-    --sx .65s cubic-bezier(.4,.1,.2,1), --sy .65s cubic-bezier(.4,.1,.2,1), --rx .65s, --ry .65s,
-    --s2x .65s cubic-bezier(.4,.1,.2,1), --s2y .65s cubic-bezier(.4,.1,.2,1), --r2x .65s, --r2y .65s;
-}
