@@ -10,6 +10,7 @@
   --own-w: 110px; --own-h: 165px;
   --opp-w: 84px;  --opp-h: 126px;
   --mid-w: 140px; --mid-h: 210px;
+  --wal-w: 88px;  --wal-h: 132px;
 }
 * { box-sizing: border-box; }
 html, body { margin: 0; height: 100%; overflow: clip; }
@@ -45,6 +46,7 @@ button { font-family: inherit; cursor: pointer; }
 .card.own { width: var(--own-w); height: var(--own-h); }
 .card.opp { width: var(--opp-w); height: var(--opp-h); border-radius: 6px; }
 .card.mid { width: var(--mid-w); height: var(--mid-h); border-radius: 10px; }
+.card.wal { width: var(--wal-w); height: var(--wal-h); border-radius: 7px; }
 .cnt {
   position: absolute; z-index: 20; min-width: 26px; height: 26px; padding: 0 6px; border-radius: 99px;
   background: var(--wood); color: var(--paper); border: 2px solid var(--paper);
@@ -212,12 +214,18 @@ button { font-family: inherit; cursor: pointer; }
 
 /* ================================================================ Eigener Bereich */
 #wallet { position: absolute; left: 86px; bottom: 60px; width: 520px; height: 200px; }
-.mstack { position: absolute; bottom: 0; width: var(--own-w); height: var(--own-h); transition: transform .16s; }
+.mstack { position: absolute; bottom: 0; width: var(--wal-w); height: var(--wal-h); transition: transform .16s; }
 .mstack:hover { transform: translateY(-14px); z-index: 30 !important; }
-.mstack > .cnt { left: 34px; top: -13px; }   /* im nicht überdeckten Streifen */
+.mstack > .cnt { left: 26px; top: -13px; }
 .mstack.selectable { cursor: pointer; }
 .mstack.selectable:hover .card:last-of-type { box-shadow: 0 0 0 3px var(--gold), 0 8px 18px rgba(0,0,0,.4); }
 .mstack.empty { opacity: .35; }
+.mstack .plus {
+  position: absolute; left: 50%; top: 45%; transform: translate(-50%, -50%) scale(.8); z-index: 21; opacity: 0;
+  background: var(--gold); color: var(--wood); border: 2px solid var(--wood); border-radius: 99px; padding: 2px 10px;
+  font-family: "Lilita One"; font-size: 18px; box-shadow: 0 3px 8px rgba(0,0,0,.4); transition: opacity .12s, transform .12s; pointer-events: none;
+}
+.mstack.selectable:hover .plus { opacity: 1; transform: translate(-50%, -50%) scale(1); }
 
 #offer-pile { position: absolute; left: 86px; bottom: 262px; width: 520px; height: 190px; display: none; }
 #offer-pile.show { display: block; }

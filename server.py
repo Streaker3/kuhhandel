@@ -3,6 +3,8 @@ from __future__ import annotations
 
 import json
 import mimetypes
+import os
+import pickle
 import sys
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -14,16 +16,20 @@ from kuhhandel.view import player_view
 
 ROOT = Path(__file__).parent
 CK = ROOT / "checkpoints"
-# Schwierigkeitsstufen = verschieden weit trainierte Stände der KI
+SAVE = ROOT / "saves" / "spielstand.pkl"
+# Schwierigkeitsstufen (gemessen gegen die einfachen Bots, 4 Spieler, Zufall 25 %):
+#   leicht = früher Trainingsstand (~37 %), mittel = beste KI entscheidet 55 % der Züge,
+#   sonst ein einfacher Bot (~56–60 %, fliegt kaum auf), schwer = beste KI (~82 %)
 LEVELS = {
-    "leicht": [CK / "snap_00060.pt"],
-    "mittel": [CK / "snap_00150.pt"],
-    "schwer": [CK / "best.pt", CK / "latest.pt"],
+    "leicht": {"paths": [CK / "snap_00060.pt"]},
+    "mittel": {"paths": [CK / "best.pt", CK / "latest.pt"], "p_ai": 0.55},
+    "schwer": {"paths": [CK / "best.pt", CK / "latest.pt"]},
 }
 
 
 def ai_checkpoint(level="schwer"):
-    for p in LEVELS.get(level, LEVELS["schwer"]) + LEVELS["schwer"]:
+    cfg = LEVELS.get(level, LEVELS["schwer"])
+    for p in cfg["paths"] + LEVELS["schwer"]["paths"]:
         if p.exists():
             return p
     return None
@@ -35,28 +41,59 @@ def make_ai_bot(level="schwer"):
     if ck is None:
         return None
     try:
-        from kuhhandel.model import NNBot
+        from kuhhandel.model import MixedBot, NNBot
     except ImportError:
         return None
-    return NNBot(ck)
+    p_ai = LEVELS.get(level, {}).get("p_ai")
+    return MixedBot(ck, p_ai) if p_ai else NNBot(ck)
 
 WEB = Path(__file__).parent / "web"
 BOT_NAMES = ["Berta", "Konrad", "Hilde", "Gustav"]
 HUMAN = 0
 
 lock = threading.Lock()
-state = {"game": None, "bots": {}}
+state = {"game": None, "bots": {}, "opponents": "ai", "level": "schwer"}
 
 
-def new_game(players: int, name: str, opponents: str = "ai", level: str = "schwer", seed=None):
-    names = [name or "Du"] + BOT_NAMES[: players - 1]
-    g = Game(players, seed=seed, names=names)
-    state["game"] = g
+def make_bots(players: int, opponents: str, level: str):
     bots = {}
     for p in range(1, players):
         bot = make_ai_bot(level) if opponents == "ai" else None
         bots[p] = bot or HeuristicBot(seed=None)
-    state["bots"] = bots
+    return bots
+
+
+def new_game(players: int, name: str, opponents: str = "ai", level: str = "schwer", seed=None):
+    names = [name or "Du"] + BOT_NAMES[: players - 1]
+    state["game"] = Game(players, seed=seed, names=names)
+    state["opponents"], state["level"] = opponents, level
+    state["bots"] = make_bots(players, opponents, level)
+
+
+def save_game():
+    """Spielstand nach jedem Zug speichern, damit ein Neustart des Servers nichts kostet."""
+    if state["game"] is None:
+        return
+    SAVE.parent.mkdir(exist_ok=True)
+    tmp = SAVE.with_suffix(".tmp")
+    with open(tmp, "wb") as f:
+        pickle.dump({"game": state["game"], "opponents": state["opponents"], "level": state["level"]}, f)
+    os.replace(tmp, SAVE)   # atomar: nie eine halb geschriebene Datei
+
+
+def load_game():
+    if not SAVE.exists():
+        return
+    try:
+        with open(SAVE, "rb") as f:
+            data = pickle.load(f)
+    except Exception as e:  # z. B. nach Änderungen an der Engine
+        print(f"Spielstand konnte nicht geladen werden ({e}) – starte ohne.")
+        return
+    g = data["game"]
+    state.update(game=g, opponents=data["opponents"], level=data["level"],
+                 bots=make_bots(g.n, data["opponents"], data["level"]))
+    print(f"Spielstand geladen: {g.n} Spieler, Phase {g.phase}.")
 
 
 def training_data():
@@ -148,6 +185,7 @@ class Handler(BaseHTTPRequestHandler):
                     new_game(int(body.get("players", 4)), body.get("name", "Du"), body.get("opponents", "ai"),
                              body.get("level", "schwer"))
                     state["owner"] = client
+                    save_game()
                     return self._json(self._view(0))
                 if path == "/api/takeover":
                     # Nur ein Tab steuert das Spiel: der zuletzt geöffnete übernimmt
@@ -162,6 +200,7 @@ class Handler(BaseHTTPRequestHandler):
                     if g.to_act != HUMAN:
                         return self._json({"error": "Du bist nicht dran"}, 400)
                     g.step(parse_action(body["action"]))
+                    save_game()
                     return self._json(self._view(since))
                 if path == "/api/skip_auction":
                     # Test-Hilfe: Versteigerung automatisch zu Ende spielen (eigene Züge macht ein Heuristik-Bot)
@@ -169,10 +208,12 @@ class Handler(BaseHTTPRequestHandler):
                     while g.phase == "auction":
                         bot = stand_in if g.to_act == HUMAN else state["bots"][g.to_act]
                         g.step(bot.act(g))
+                    save_game()
                     return self._json(self._view(since))
                 if path == "/api/bot_step":
                     if g.to_act is not None and g.to_act != HUMAN:
                         g.step(state["bots"][g.to_act].act(g))
+                        save_game()
                     return self._json(self._view(since))
             except IllegalAction as e:
                 return self._json({"error": str(e)}, 400)
@@ -181,6 +222,10 @@ class Handler(BaseHTTPRequestHandler):
 
 def main():
     port = int(sys.argv[1]) if len(sys.argv) > 1 else 8765
+    global SAVE
+    if port != 8765:   # Test-Server bekommen einen eigenen Spielstand
+        SAVE = SAVE.with_name(f"spielstand_{port}.pkl")
+    load_game()
     srv = ThreadingHTTPServer(("127.0.0.1", port), Handler)
     print(f"Kuhhandel läuft auf http://localhost:{port}")
     srv.serve_forever()

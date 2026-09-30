@@ -10,12 +10,21 @@ uv venv --python 3.12 .venv && uv pip install --python .venv/bin/python torch nu
 
 ## Spielen
 
+Doppelklick auf **`Kuhhandel starten.command`** im Projektordner: Der Server startet, der Browser öffnet sich.
+Das Terminal-Fenster offen lassen, solange du spielst; schließen beendet den Server.
+
+Oder im Terminal:
+
 ```bash
 .venv/bin/python server.py
 ```
+
+Der Spielstand wird nach jedem Zug in `saves/spielstand.pkl` gespeichert und beim nächsten Start automatisch fortgesetzt.
 Dann http://localhost:8765 öffnen. `?fast` in der URL lässt die Bots ohne Pause spielen (zum Testen).
 
-- Gegner: trainierte KI in drei Stufen (Leicht = Trainingsstand 60, Mittel = 150, Schwer = bester Stand) oder einfache Bots.
+- Gegner: trainierte KI in drei Stufen oder einfache Bots. Siegquote gegen die einfachen Bots (4 Spieler, Zufall 25 %):
+  Leicht = früher Trainingsstand (~37 %), Mittel = beste KI entscheidet 55 % der Züge, sonst ein einfacher Bot (~56 %),
+  Schwer = beste KI (~82 %).
 - ⚙️-Menü: Tempo, Spielverlauf, Regeln, Ton an/aus, Versteigerung überspringen, KI-Training live, neues Spiel.
 - Es steuert immer nur ein Browser-Tab das Spiel; ein anderer Tab kann mit „Hier weiterspielen“ übernehmen.
 - Zum Testen parallel: `.venv/bin/python server.py 8766` (eigener Spielstand).

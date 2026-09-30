@@ -9,7 +9,7 @@ const AVATAR_ANIMAL = ["hahn", "kuh", "esel", "schwein", "ziege"];
 const A = "assets/web/";
 const tierImg = (key) => `${A}tier_${key}.webp`;
 const geldImg = (d) => `${A}geld_${d}.webp`;
-const OWN = { w: 110, h: 165 }, OPP = { w: 84, h: 126 };
+const OWN = { w: 110, h: 165 }, OPP = { w: 84, h: 126 }, WAL = { w: 88, h: 132 };
 
 const $ = (s) => document.querySelector(s);
 const el = (tag, cls, html) => {
@@ -584,7 +584,7 @@ function renderWallet() {
   w.innerHTML = "";
   const notes = V.players[V.me].notes;
   const idx = V.denoms.map((_, i) => i).filter((i) => notes[i] > 0);
-  const { xs } = packPositions(idx.map(() => OWN.w), V.phase === "trade" ? 470 : 460, 12);
+  const { xs } = packPositions(idx.map(() => WAL.w), V.phase === "trade" ? 470 : 460, 10);
   if (!selectMode) selected = notes.map(() => 0);   // Auswahl gilt nur im Kuhhandel-Gebot
   idx.forEach((i, k) => {
     selected[i] = Math.min(selected[i], notes[i]);
@@ -595,12 +595,13 @@ function renderWallet() {
     s.style.zIndex = k + 1;
     const layers = Math.min(Math.max(avail, 1), 4);
     for (let j = 0; j < layers; j++) {
-      s.appendChild(Object.assign(el("div", "card own"), {
+      s.appendChild(Object.assign(el("div", "card wal"), {
         style: `left:${j * 2}px;bottom:${j * 3}px;background-image:url(${geldImg(d)})`,
       }));
     }
     s.appendChild(el("span", "cnt", `×${avail}`));
-    s.title = `${avail}× ${d}`;
+    if (selectMode && avail) s.appendChild(el("span", "plus", "+1"));
+    s.title = selectMode && avail ? `Eine ${d}er-Karte ins Gebot legen (${avail} übrig)` : `${avail}× ${d}`;
     if (selectMode && avail) s.onclick = () => { selected[i]++; render(); };
     w.appendChild(s);
   });

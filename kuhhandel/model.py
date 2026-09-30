@@ -75,3 +75,18 @@ class NNBot:
         obs = torch.from_numpy(observe(g)).unsqueeze(0)
         mask = torch.from_numpy(legal_mask(g)).unsqueeze(0)
         return float(self.net(obs, mask)[1])
+
+
+class MixedBot:
+    """Mittlere Stärke: bei jedem Zug entscheidet mit Wahrscheinlichkeit `p_ai` die KI, sonst ein Heuristik-Bot."""
+
+    def __init__(self, net_or_path, p_ai: float = 0.55, seed=None):
+        from .bots import HeuristicBot
+        import random
+        self.ai = NNBot(net_or_path, seed=seed)
+        self.heur = HeuristicBot(seed=seed)
+        self.p_ai = p_ai
+        self.rng = random.Random(seed)
+
+    def act(self, g: Game):
+        return (self.ai if self.rng.random() < self.p_ai else self.heur).act(g)
