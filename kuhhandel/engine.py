@@ -44,6 +44,12 @@ def notes_value(notes) -> int:
     return sum(c * d for c, d in zip(notes, DENOMS))
 
 
+def stack_size(notes) -> int:
+    """Grobe Stapelhöhe (0-5), wie Mitspieler sie sehen – die genaue Anzahl ist nicht abzählbar."""
+    c = sum(notes)
+    return 0 if c == 0 else 1 if c <= 3 else 2 if c <= 6 else 3 if c <= 10 else 4 if c <= 16 else 5
+
+
 def bid_cap(cash: int) -> int:
     return (cash * 2 + 100) // 10 * 10
 

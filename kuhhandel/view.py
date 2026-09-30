@@ -1,13 +1,7 @@
 """Spielzustand aus Sicht eines Spielers (nur erlaubte Informationen)."""
 from __future__ import annotations
 
-from .engine import ANIMALS, DENOMS, Game, bid_cap, notes_value
-
-
-def money_stack_size(notes) -> int:
-    """Grobe Stapelhöhe (1-5) für Gegner – nicht exakt abzählbar."""
-    c = sum(notes)
-    return 0 if c == 0 else 1 if c <= 3 else 2 if c <= 6 else 3 if c <= 10 else 4 if c <= 16 else 5
+from .engine import ANIMALS, DENOMS, Game, bid_cap, notes_value, stack_size
 
 
 def player_view(g: Game, me: int, event_start: int = 0) -> dict:
@@ -17,7 +11,7 @@ def player_view(g: Game, me: int, event_start: int = 0) -> dict:
             "name": g.names[p],
             "animals": list(g.animals[p]),
             "quartets": sum(1 for c in g.animals[p] if c == 4),
-            "stack": money_stack_size(g.cash[p]),
+            "stack": stack_size(g.cash[p]),
         }
         if p == me:
             d["notes"] = list(g.cash[p])

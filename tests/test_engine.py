@@ -1,7 +1,7 @@
 import unittest
 
 from kuhhandel.bots import HeuristicBot, RandomBot, play_game
-from kuhhandel.engine import (BANK_TOTAL, DENOMS, ESEL, Game, IllegalAction, bid_cap,
+from kuhhandel.engine import (BANK_TOTAL, ESEL, Game, IllegalAction, bid_cap,
                               compose_payment, notes_value)
 
 

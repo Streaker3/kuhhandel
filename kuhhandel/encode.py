@@ -11,7 +11,7 @@ from __future__ import annotations
 import numpy as np
 
 from .engine import (DENOMS, NUM_ANIMALS, VALUES, Game, bid_cap, compose_payment,
-                     notes_value)
+                     notes_value, stack_size)
 
 MAX_SEATS = 5
 
@@ -147,7 +147,7 @@ def observe(g: Game, me: int | None = None) -> np.ndarray:
             1.0,
             sum(1 for c in an if c == 4) / 4.0,
             _score(an) / 10000.0,
-            min(sum(g.cash[p]), 30) / 30.0 if p == me else _stack_bucket(g.cash[p]) / 5.0,
+            min(sum(g.cash[p]), 30) / 30.0 if p == me else stack_size(g.cash[p]) / 5.0,
             (known / M) if known is not None else 0.0,
             1.0 if known is not None else 0.0,
             1.0 if au and au["auctioneer"] == p else 0.0,
@@ -205,11 +205,6 @@ def observe(g: Game, me: int | None = None) -> np.ndarray:
         pub[-1] = 1.0 if t["stage"] == "respond" else 0.0
     f += pub
     return np.asarray(f, dtype=np.float32)
-
-
-def _stack_bucket(notes) -> int:
-    c = sum(notes)
-    return 0 if c == 0 else 1 if c <= 3 else 2 if c <= 6 else 3 if c <= 10 else 4 if c <= 16 else 5
 
 
 OBS_SIZE = None

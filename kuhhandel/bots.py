@@ -3,8 +3,7 @@ from __future__ import annotations
 
 import random
 
-from .engine import (DENOMS, NUM_ANIMALS, VALUES, Game, bid_cap, compose_payment,
-                     notes_value)
+from .engine import DENOMS, VALUES, Game, bid_cap, compose_payment, notes_value
 
 TOTAL_QUARTET_VALUE = sum(VALUES)
 MONEY_PER_PLAYER = 940  # 90 Start + 850 Esel-Boni
