@@ -1622,6 +1622,12 @@ function fit() {
 }
 fit();
 window.addEventListener("resize", () => { fit(); placeBanner(); });
+// Eigenes Tischbild für hochkant (assets/web/tisch_hochkant.webp), sonst wird das Querbild umgebaut
+{
+  const img = new Image();
+  img.onload = () => document.body.classList.add("felt-port");
+  img.src = `${A}tisch_hochkant.webp`;
+}
 // Die Seite ist ein Spieltisch, kein Dokument: Zoomen per Zwei-Finger-Geste und Doppeltippen verhindern
 // (das Neuzeichnen der großen, skalierten Bühne ließ die Seite beim Zoomen weiß werden).
 ["gesturestart", "gesturechange"].forEach((t) => document.addEventListener(t, (e) => e.preventDefault()));

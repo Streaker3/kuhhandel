@@ -537,6 +537,7 @@ body.portrait #stage::after {
   content: ""; position: absolute; inset: 0; z-index: -1; pointer-events: none;
   border: 16px solid transparent; border-image: url("assets/web/tisch.webp") 58 fill / 16px stretch;
 }
+body.portrait.felt-port #stage::after { border: none; border-image: none; background: url("assets/web/tisch_hochkant.webp") center / 100% 100% no-repeat; }
 body.portrait #stage::before { left: 16px; right: 16px; top: 16px; bottom: 16px; }
 
 /* Gegner: kompakter Kopf, Gebotsblase unter dem Bild */
