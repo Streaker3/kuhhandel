@@ -680,12 +680,10 @@ function renderHand() {
     g.appendChild(el("span", "cnt", full ? "✓ Quartett" : `${c}/4`));
     g.appendChild(el("span", "name", `${V.animals[a].name} · ${V.animals[a].value}`));
     if (p2) {
-      const pops = popsFor(a, c, options);
+      // Am Tischrand fächern die Gegner-Karten zur Mitte hin auf (erste gerade nach oben)
       const cx = 1600 - 70 - W + left + widths[gi] / 2;   // Mitte der Gruppe in Bühnenkoordinaten
-      const reach = 175;
-      const shift = Math.min(0, 1530 - (cx + reach)) + Math.max(0, 70 - (cx - reach));
-      pops.style.setProperty("--shift", `${shift}px`);
-      g.appendChild(pops);
+      const fan = cx + 170 > 1530 ? "left" : cx - 170 < 70 ? "right" : "center";
+      g.appendChild(popsFor(a, c, options, fan));
     } else if (!full && c > 1) {
       // Phase 1: beim Hovern auffächern, ohne über den Tischrand zu ragen
       g.onmouseenter = () => {
@@ -702,7 +700,7 @@ function renderHand() {
 }
 
 /** Kuhhandel: Hinter der Karte kommen die Gegner hervor, die dieses Tier auch haben. */
-function popsFor(a, c, options) {
+function popsFor(a, c, options, fan = "center") {
   const box = el("div", "pops");
   const holders = [];
   for (let i = 1; i < V.n; i++) {
@@ -716,7 +714,10 @@ function popsFor(a, c, options) {
   else if (!holders.length) items = [[null, "Niemand sonst"]];
   const spread = items.length > 1 ? Math.min(26, 60 / (items.length - 1)) : 0;
   items.forEach(([q, n], i) => {
-    const ang = items.length > 1 ? -((items.length - 1) * spread) / 2 + i * spread : 0;
+    const ang = items.length < 2 ? 0
+      : fan === "left" ? -i * spread
+      : fan === "right" ? i * spread
+      : -((items.length - 1) * spread) / 2 + i * spread;
     const active = q !== null && canChallenge(q);
     const pop = el("div", "pop" + (active ? " active" : "") + (q === null ? " info" : ""));
     pop.style.setProperty("--ang", `${ang}deg`);
@@ -814,6 +815,13 @@ function renderActions() {
     if (V.phase === "auction" && V.auction && V.auction.auctioneer === V.me && V.auction.stage === "bidding") txt = `Du versteigerst – ${txt}`;
     if (V.phase === "auction" && V.auction && V.auction.excluded.includes(V.me)) txt = `Du bist von dieser Versteigerung ausgeschlossen – ${txt}`;
     box.innerHTML = `<div class="waiting">${txt}<span class="dots"></span></div>`;
+    // Nur noch komplette Quartette -> man kann nichts mehr tun: Rest auf Wunsch schnell durchspielen
+    const done = V.phase === "trade" && V.players[V.me].animals.every((c) => c === 0 || c === 4);
+    if (done && speed !== 2) {
+      box.insertAdjacentHTML("beforeend", `<div class="hint">Du hast nur noch komplette Quartette – der Rest läuft ohne dich.</div>
+        <div class="btns" style="margin-top:8px"><button class="btn primary" id="gofast">⚡ Rest schnell durchspielen</button></div>`);
+      $("#gofast").onclick = () => setSpeed(2);
+    }
     return;
   }
   const au = V.auction;
@@ -1480,10 +1488,13 @@ function showStart() {
 
 const closeMenu = () => $("#menu").classList.remove("open");
 $("#menu-toggle").onclick = (e) => { e.stopPropagation(); $("#menu").classList.toggle("open"); };
-segment("#m-speed", "s", (v) => {
+function setSpeed(v) {
   speed = +v;
   try { localStorage.setItem("kh-speed", speed); } catch (e) { /* egal */ }
-});
+  document.querySelectorAll("#m-speed button").forEach((b) => b.classList.toggle("on", +b.dataset.s === speed));
+  if (V) { render(); scheduleBot([]); }   // sofort im neuen Tempo weiter
+}
+segment("#m-speed", "s", (v) => setSpeed(v));
 document.querySelector(`#m-speed [data-s="${speed}"]`).classList.add("on");
 $("#m-log").onclick = () => { closeMenu(); $("#log").classList.add("open"); };
 $("#m-rules").onclick = () => { closeMenu(); showRules(); };

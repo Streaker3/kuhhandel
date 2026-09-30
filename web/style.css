@@ -252,7 +252,9 @@ button { font-family: inherit; cursor: pointer; }
 .hand-empty { position: absolute; right: 150px; bottom: 70px; color: rgba(247,239,220,.75); font-size: 15px; }
 
 /* Kuhhandel: Gegner kommen hinter der eigenen Karte hervor */
-.hgroup .pops { position: absolute; left: 0; right: 0; bottom: 0; height: 100%; z-index: 0; pointer-events: none; transform: translateX(var(--shift, 0px)); }
+.hgroup .pops { position: absolute; left: 0; right: 0; bottom: 0; height: 100%; z-index: 0; pointer-events: none; }
+/* unsichtbare Brücke über der Karte, damit die Maus die Gegner-Karten sicher erreicht */
+.hgroup .pops::before { content: ""; position: absolute; left: 0; right: 0; bottom: 92%; height: 60px; }
 .hgroup:hover .pops { pointer-events: auto; }
 .pop {
   position: absolute; left: 50%; bottom: 36px; width: 120px; height: 150px; margin-left: -60px; z-index: 0;
@@ -261,7 +263,7 @@ button { font-family: inherit; cursor: pointer; }
   transform: rotate(var(--ang)) translateY(0) scale(.7); opacity: 0;
   transition: transform .25s cubic-bezier(.2,.9,.3,1.2), opacity .18s; transition-delay: 0s;
 }
-.hgroup:hover .pop { transform: rotate(var(--ang)) translateY(-158px) scale(1); opacity: 1; transition-delay: var(--d); }
+.hgroup:hover .pop { transform: rotate(var(--ang)) translateY(-146px) scale(1); opacity: 1; transition-delay: var(--d); }
 .pop .avatar { width: 40px; height: 40px; margin: 0 auto; border-width: 2px; box-shadow: 0 0 0 2px var(--wood); }
 .pop .pn { font-weight: 600; font-size: 15px; margin-top: 3px; line-height: 1.1; }
 .pop .pc { font-size: 14px; color: var(--ink-soft); }
