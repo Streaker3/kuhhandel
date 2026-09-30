@@ -229,6 +229,7 @@ function draw(data) {
   if (!rows.length) { $("#tiles").innerHTML = "<p>Noch keine Trainingsdaten.</p>"; return; }
   const last = rows[rows.length - 1];
   const evals = rows.filter((r) => r.eval_winrate);
+  const champs = rows.filter((r) => r.vs_champ_winrate);
   const olds = rows.filter((r) => r.vs_old_winrate);
   const le = evals[evals.length - 1];
   const lo = olds[olds.length - 1];
@@ -251,7 +252,6 @@ function draw(data) {
   const s1 = byN(evals, "eval_by_n");
   legend($("#lg1"), [...s1, ref]);
   lineChart($("#c1"), s1, { yMin: 0, yMax: 1, fmt: pct, ref: RANDOM });
-  const champs = rows.filter((r) => r.vs_champ_winrate);
   const s2 = [
     { name: "gegen Champion", color: css("--series-4"), points: champs.map((r) => [r.iter, +r.vs_champ_winrate]) },
     { name: "gegen ältere Version", color: css("--series-2"), points: olds.map((r) => [r.iter, +r.vs_old_winrate]) },
