@@ -1,0 +1,53 @@
+{
+  "task": "Create one square profile avatar portrait for a board-game UI, as a finished illustration (not a photo).",
+  "style": {
+    "medium": "Hand-drawn cartoon illustration by a professional comic and children's-book illustrator; confident dark-brown ink linework, expressive sketch hatching, soft watercolor washes, and simple colored-pencil shading.",
+    "character_design": "Humorous, charming, slightly exaggerated caricature with large expressive eyes and a mischievous grin; warm and friendly, never crude.",
+    "palette": "Warm natural earth tones, muted pastels, cream, warm gray, taupe, and golden yellow; gentle highlights; no neon colors.",
+    "background": "Plain warm cream paper background with subtle grain and a soft round light-cream halo behind the head. No scenery.",
+    "linework": "Loose but confident dark-brown/near-black ink outlines, varied hand-drawn strokes, fine hatching and crosshatching for fur and shadows.",
+    "shading": "Soft watercolor texture with colored-pencil accents and small cream highlights; avoid glossy, photorealistic, or 3D rendering.",
+    "consistency": "Same hand, line weight, watercolor shading and humor as the bald baffled man on the 0-money card of this set; all five portraits must look like one family of characters."
+  },
+  "portrait": {
+    "subject": "Konrad, a lanky middle-aged farmer with a long face and big ears",
+    "features": "An enormous bushy walrus mustache that covers his mouth, a flat cap sitting crooked on his head, a single stalk of straw poking out of the mustache.",
+    "facial_expression": "Cheeks puffed out like balloons as if holding his breath, eyes slightly crossed, looking desperately tense and stubborn.",
+    "outfit": "Wearing a brown corduroy jacket over a collarless shirt with one button in the wrong hole.",
+    "pose": "Head and shoulders, facing the viewer (slight three-quarter turn allowed), head centered.",
+    "text_rule": "No text, letters, numbers, logos or name tags anywhere."
+  },
+  "composition": {
+    "orientation": "square",
+    "aspect_ratio": "1:1",
+    "framing": "Head fills about 60% of the image height, centered with even margin on all sides so the image can be cropped into a circle without cutting off the hair, hat or ears."
+  },
+  "output": {
+    "resolution": "1024x1024",
+    "format": "PNG"
+  },
+  "negative_prompt": [
+    "photorealism",
+    "3D render",
+    "glossy CGI",
+    "flat vector art",
+    "anime",
+    "pixel art",
+    "text",
+    "letters",
+    "numbers",
+    "logos",
+    "watermark",
+    "signature",
+    "frame",
+    "card border",
+    "scenery",
+    "full saturated background",
+    "neon colors",
+    "cropped head",
+    "cropped hat",
+    "extra fingers",
+    "creepy",
+    "grotesque"
+  ]
+}

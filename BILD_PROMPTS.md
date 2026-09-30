@@ -17,7 +17,8 @@ fügst du als Prompt in dein Bild-Tool ein. Der `style`-Block ist in allen Karte
 | `geld_<wert>.json` | `web/assets/money/<wert>.png` |
 | `rueckseite.json` | `web/assets/card_back.png` |
 | `rueckseite_geld.json` | `web/assets/money_back.png` |
-| `tisch.json` | `web/assets/table.png` |
+| `tisch.json` | `web/assets/tisch.png` |
+| `avatar_<name>.json` | `web/assets/avatars/avatar_<name>.png` |
 
 ## Stil
 
@@ -31,3 +32,12 @@ fügst du als Prompt in dein Bild-Tool ein. Der `style`-Block ist in allen Karte
 
 Im JSON-Text `"number"` durch `"number": "none – leave the top-left corner empty"` ersetzen.
 Die Zahlen setze ich dann in der Oberfläche selbst ein. Sag mir Bescheid, falls du das brauchst.
+
+## Profilbilder
+
+Für die Profilbilder gibt es `avatar_berta`, `avatar_konrad`, `avatar_hilde`, `avatar_gustav` und `avatar_du` (das bist du).
+Gib die 0er-Geldkarte als Stilvorlage mit. Danach die Web-Versionen erzeugen:
+
+```bash
+.venv/bin/python convert_assets.py
+```

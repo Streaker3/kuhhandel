@@ -8,3 +8,4 @@ web/assets/money/
 web/assets/*.png
 web/assets/.DS_Store
 .DS_Store
+web/assets/avatars/

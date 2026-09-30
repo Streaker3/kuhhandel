@@ -84,7 +84,17 @@ async function act(action) {
 const nameOf = (p) => (p === V.me ? "Du" : V.players[p].name);
 const animalKey = (a) => V.animals[a].key;
 
+// Eigene Profilbilder (assets/web/avatar_<key>.webp), sonst Ausschnitt einer Tierkarte
+const AVATAR_KEY = ["du", "berta", "konrad", "hilde", "gustav"];
+const avatarOk = {};
+AVATAR_KEY.forEach((k) => {
+  const img = new Image();
+  img.onload = () => { avatarOk[k] = true; if (V) { $("#seats").querySelectorAll(".seat").forEach((s) => { s.dataset.html = ""; }); render(); } };
+  img.src = `${A}avatar_${k}.webp`;
+});
 function avatarHTML(p) {
+  const k = AVATAR_KEY[p % AVATAR_KEY.length];
+  if (avatarOk[k]) return `<div class="avatar" style="background-image:url(${A}avatar_${k}.webp);background-size:cover;background-position:center"></div>`;
   return `<div class="avatar" style="background-image:url(${tierImg(AVATAR_ANIMAL[p % AVATAR_ANIMAL.length])})"></div>`;
 }
 function scoreOf(animals) {
