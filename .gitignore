@@ -9,3 +9,5 @@ web/assets/*.png
 web/assets/.DS_Store
 .DS_Store
 web/assets/avatars/
+web/assets/**/*.jpeg
+web/assets/**/*.jpg

@@ -94,7 +94,7 @@ AVATAR_KEY.forEach((k) => {
 });
 function avatarHTML(p) {
   const k = AVATAR_KEY[p % AVATAR_KEY.length];
-  if (avatarOk[k]) return `<div class="avatar" style="background-image:url(${A}avatar_${k}.webp);background-size:cover;background-position:center"></div>`;
+  if (avatarOk[k]) return `<div class="avatar" style="background-image:url(${A}avatar_${k}.webp);background-size:128%;background-position:50% 28%"></div>`;
   return `<div class="avatar" style="background-image:url(${tierImg(AVATAR_ANIMAL[p % AVATAR_ANIMAL.length])})"></div>`;
 }
 /** Sichtbarer Tierbestand: Karten, die gerade im Kuhhandel in der Mitte liegen, fehlen im Inventar. */
