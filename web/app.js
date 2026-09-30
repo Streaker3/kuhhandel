@@ -290,6 +290,18 @@ function unfocusSeat(keepDim) {
   if (!keepDim) undim();
 }
 
+/** Versteigerung: kurz abdunkeln, während die neue Karte aufgedeckt wird (nicht im Tempo „Schnell“). */
+function spotlightCard() {
+  if (FAST || speed === 2 || focusP !== null) return;
+  const area = $("#pile-area");
+  clearTimeout(dimTimer);
+  setTimeout(() => {
+    $("#dim").classList.add("soft");
+    dimAt(area.getBoundingClientRect(), { instant: true });
+    dimTimer = setTimeout(() => { undim(); setTimeout(() => $("#dim").classList.remove("soft"), 400); }, 1150);
+  }, 20);
+}
+
 /** Im Kuhhandel: Tisch kurz abdunkeln und den Scheinwerfer zum nächsten Spieler wandern lassen. */
 function spotlightTurn(from, to) {
   if (FAST || focusP !== null) return;
@@ -439,7 +451,10 @@ function renderCenter() {
     rev.dataset.key = key;
     if (shown === null) rev.innerHTML = "";
     else if (t && V.phase === "trade") rev.innerHTML = tradeCardsHTML(t);
-    else rev.innerHTML = `<div class="flip in"><div class="face b"></div><div class="face f" style="background-image:url(${tierImg(animalKey(shown))})"></div></div>`;
+    else {
+      rev.innerHTML = `<div class="flip in"><div class="face b"></div><div class="face f" style="background-image:url(${tierImg(animalKey(shown))})"></div></div>`;
+      spotlightCard();
+    }
   }
   // verdeckter Geldstapel des Herausforderers liegt neben der Karte auf dem Tisch
   const ts = $("#tstack");
@@ -1093,13 +1108,18 @@ function showReveal(ev, done) {
         <div class="rcards">${back(Math.max(oppCards.length, 0), "opp") || '<span class="rempty">leerer Stapel</span>'}</div>
         <div class="rsum num" id="rv-opp">0</div></div>
       ${mine ? `<div class="rmid"><div class="rvs">gegen</div><div class="rdelta" id="rv-delta"></div></div>
-      <div class="rside"><div class="rwho">Du <span class="rhint">(verdeckt)</span></div>
+      <div class="rside"><div class="rwho">Du <span class="rhint">(nur du siehst sie)</span></div>
         <div class="rcards">${back(mine.length, "mine") || '<span class="rempty">leerer Stapel</span>'}</div>
         <div class="rsum num">${mySum}</div></div>` : ""}
     </div>`;
   $("#stage").appendChild(box);
   const cards = [...box.querySelectorAll(".rc.opp")];
   cards.forEach((c, i) => { c.querySelector(".rfront").style.backgroundImage = `url(${geldImg(oppCards[i])})`; });
+  // eigene Karten liegen von Anfang an offen (man weiß ja, was man gelegt hat)
+  [...box.querySelectorAll(".rc.mine")].forEach((c, i) => {
+    c.querySelector(".rfront").style.backgroundImage = `url(${geldImg(mine[i])})`;
+    c.classList.add("up", "still");
+  });
   let shown = 0;
   const STEP = Math.max(160, Math.min(300, 1700 / Math.max(1, cards.length)));
   const START = 1300;   // kurz Spannung aufbauen, bevor die erste Karte umgedreht wird

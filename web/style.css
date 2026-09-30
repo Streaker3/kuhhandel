@@ -573,3 +573,8 @@ button { font-family: inherit; cursor: pointer; }
 .reveal .rdelta.bad { color: #ef6f63; -webkit-text-stroke: 1.5px #4a130e; paint-order: stroke fill; }
 .reveal .rdelta small { display: block; font-family: "Fredoka"; font-size: 14px; font-weight: 600; -webkit-text-stroke: 0; margin-top: 4px; opacity: .9; }
 @keyframes deltain { to { opacity: 1; transform: scale(1); } }
+
+/* eigene Karten in der Aufdeck-Szene liegen ohne Dreh-Animation offen */
+.reveal .rc.still .rf { transition: none; }
+/* dezentere Abdunklung beim Aufdecken einer neuen Versteigerungskarte */
+#dim.soft.on { opacity: .6; }
