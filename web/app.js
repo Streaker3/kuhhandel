@@ -37,6 +37,7 @@ let bidHistory = [];       // Gebote der laufenden Versteigerung
 let lastBubble = {};       // p -> zuletzt angezeigte Sprechblase (für Animation nur bei Änderung)
 let lastAmount = null;
 let revealHoldUntil = 0;   // nach einem Verkauf: nächste Karte erst nach Flug + kurzer Pause aufdecken
+let actionHoldUntil = 0;   // Aktionsfeld erst freigeben, wenn die neue Karte umgedreht ist
 let holdTimer = null;
 const REVEAL_PAUSE = 500;
 
@@ -220,7 +221,7 @@ function packPositions(widths, avail, gap) {
 // Sitzpositionen der Gegner [Mitte x, Oberkante y, Breite] je Anzahl Gegner
 const SEAT_POS = {
   1: [[800, 62, 440, 1]],
-  2: [[600, 62, 320, 1], [1000, 62, 320, 1]],
+  2: [[430, 62, 560, 1], [1170, 62, 560, 1]],
   3: [[215, 120, 250, 2], [800, 62, 340, 1], [1385, 120, 250, 2]],
   4: [[215, 120, 250, 2], [600, 62, 300, 1], [1000, 62, 300, 1], [1385, 120, 250, 2]],
 };
@@ -299,12 +300,24 @@ function unfocusSeat(keepDim) {
 
 /** Versteigerung: kurz abdunkeln, während die neue Karte aufgedeckt wird (nicht im Tempo „Schnell“). */
 let lastAuctioneer = null;
-function spotlightCard() {
+let spotReadyAt = 0;       // warmes Licht hinter dem Versteigerer erst nach dem Scheinwerfer
+const SPOT_MOVE = 120 + 650, SPOT_HOLD = 2000, DIM_FADE = 350;
+function spotlightCard(flip) {
   const au = V.auction;
   const now = au ? au.auctioneer : null;
   const prevA = lastAuctioneer;
   lastAuctioneer = now;
-  if (FAST || speed === 2 || focusP !== null || now === null) return;
+  const turnOver = () => { flip.classList.remove("wait"); flip.classList.add("in"); Snd.play("flip"); };
+  if (FAST || speed === 2 || focusP !== null || now === null) { turnOver(); return; }
+  // Ablauf: Kegel wandert zum neuen Versteigerer -> Karte dreht sich -> Scheinwerfer blendet aus -> warmes Licht erscheint
+  const moves = prevA !== null && prevA !== now;
+  const flipAt = moves ? SPOT_MOVE + 60 : 250;
+  setTimeout(turnOver, flipAt);
+  actionHoldUntil = Date.now() + flipAt + 700;
+  spotReadyAt = Date.now() + SPOT_HOLD + DIM_FADE;
+  document.querySelectorAll(".seat.spot, #me-plate.spot").forEach((e) => e.classList.remove("spot"));  // altes Licht aus
+  setTimeout(render, flipAt + 720);
+  setTimeout(render, SPOT_HOLD + DIM_FADE + 20);
   const elOf = (p) => (p === V.me ? $("#me-plate") : document.querySelector(`.seat[data-p="${p}"]`));
   const card = () => $("#pile-area").getBoundingClientRect();
   clearTimeout(dimTimer);
@@ -316,7 +329,7 @@ function spotlightCard() {
     // erst beim vorherigen Versteigerer, dann wandert der Kegel zum neuen; die Karte ist durchgehend im Licht
     dimAt((from || to).getBoundingClientRect(), { instant: true, second: card() });
     if (from) setTimeout(() => dimAt(to.getBoundingClientRect(), { second: card() }), 120);
-    dimTimer = setTimeout(() => { undim(); setTimeout(() => $("#dim").classList.remove("soft"), 400); }, 1500);
+    dimTimer = setTimeout(() => { undim(); setTimeout(() => $("#dim").classList.remove("soft"), 400); }, SPOT_HOLD);
   }, 20);
 }
 
@@ -429,7 +442,7 @@ function renderSeats() {
     }
     seat.style.top = `${y}px`;
     seat.classList.toggle("active", V.to_act === p);
-    seat.classList.toggle("spot", !!(V.auction && V.phase === "auction" && V.auction.auctioneer === p));
+    seat.classList.toggle("spot", !!(V.auction && V.phase === "auction" && V.auction.auctioneer === p) && Date.now() >= spotReadyAt);
     seat.classList.toggle("rside", x > 1200);
     const html = seatHTML(p, w, rows);
     if (seat.dataset.html !== html) {
@@ -470,8 +483,8 @@ function renderCenter() {
     if (shown === null) rev.innerHTML = "";
     else if (t && V.phase === "trade") rev.innerHTML = tradeCardsHTML(t);
     else {
-      rev.innerHTML = `<div class="flip in"><div class="face b"></div><div class="face f" style="background-image:url(${tierImg(animalKey(shown))})"></div></div>`;
-      spotlightCard();
+      rev.innerHTML = `<div class="flip wait"><div class="face b"></div><div class="face f" style="background-image:url(${tierImg(animalKey(shown))})"></div></div>`;
+      spotlightCard(rev.querySelector(".flip"));
     }
   }
   // verdeckter Geldstapel des Herausforderers liegt neben der Karte auf dem Tisch
@@ -552,7 +565,7 @@ function renderTopButtons() {
 function renderMePlate() {
   const P = V.players[V.me];
   const plate = $("#me-plate");
-  plate.className = (V.to_act === V.me ? "active" : "") + (V.auction && V.phase === "auction" && V.auction.auctioneer === V.me ? " spot" : "");
+  plate.className = (V.to_act === V.me ? "active" : "") + (V.auction && V.phase === "auction" && V.auction.auctioneer === V.me && Date.now() >= spotReadyAt ? " spot" : "");
   plate.innerHTML = `
     <div class="avatar-wrap">${avatarHTML(V.me)}${badgesHTML(V.me)}</div>
     <div class="nameplate">
@@ -767,7 +780,7 @@ function renderActions() {
     box.innerHTML = `<div class="waiting">Spiel beendet</div>`;
     return;
   }
-  if (mine && V.phase === "auction" && Date.now() < revealHoldUntil) {
+  if (mine && V.phase === "auction" && Date.now() < Math.max(revealHoldUntil, actionHoldUntil)) {
     box.classList.remove("mine");
     box.innerHTML = `<div class="waiting">Nächste Karte wird aufgedeckt<span class="dots"></span></div>`;
     return;
@@ -1060,7 +1073,7 @@ function handleEvent(ev) {
   if (ev.kind === "reveal_bids") return;   // reine Daten für die Aufdeck-Szene
   $("#log-list").appendChild(li);
   $("#log-list").scrollTop = 1e9;
-  const snd = { reveal: "flip", bid: "tick", sold: "sold", bought: "sold", free: "gavel", bust: "bust",
+  const snd = { bid: "tick", sold: "sold", bought: "sold", free: "gavel", bust: "bust",
     donkey: "iah", challenge: "moo", offer: "flip", trade_result: "coins", phase: "fanfare" }[ev.kind];
   if (snd) Snd.play(snd);
   if (ev.kind === "over") Snd.play(V.ranking && V.ranking[0] === V.me ? "win" : "lose");

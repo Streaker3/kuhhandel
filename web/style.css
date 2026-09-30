@@ -171,6 +171,7 @@ button { font-family: inherit; cursor: pointer; }
 #revealed { position: absolute; left: 30px; top: -2px; perspective: 1000px; }
 #revealed .flip { position: relative; width: var(--mid-w); height: var(--mid-h); transform-style: preserve-3d; transform: rotate(4deg); }
 #revealed .flip.in { animation: flipin .7s cubic-bezier(.25,.8,.3,1); }
+#revealed .flip.wait { transform: translate(-28px, 12px) rotateY(180deg); }   /* liegt noch verdeckt auf dem Stapel */
 #revealed .face { position: absolute; inset: 0; border-radius: 10px; backface-visibility: hidden; background: center / cover;
   box-shadow: 0 2px 3px rgba(0,0,0,.35), 0 14px 26px rgba(0,0,0,.45); }
 #revealed .face.b { transform: rotateY(180deg); background-image: url("assets/web/rueckseite.webp"); }
