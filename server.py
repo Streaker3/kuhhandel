@@ -126,6 +126,7 @@ class Handler(BaseHTTPRequestHandler):
         f = (WEB / path.lstrip("/")).resolve()
         if not str(f).startswith(str(WEB.resolve())) or not f.is_file():
             self.send_response(404)
+            self.send_header("Cache-Control", "no-store")  # fehlende Bilder nicht merken (z. B. später generierte)
             self.end_headers()
             return
         data = f.read_bytes()

@@ -157,7 +157,7 @@ const avatarOk = {};
 AVATAR_KEY.forEach((k) => {
   const img = new Image();
   img.onload = () => { avatarOk[k] = true; if (V) { $("#seats").querySelectorAll(".seat").forEach((s) => { s.dataset.html = ""; }); render(); } };
-  img.src = `${A}avatar_${k}.webp`;
+  img.src = `${A}avatar_${k}.webp?v=2`;
 });
 const GAVEL = `<svg class="gavel" viewBox="0 0 32 32" aria-hidden="true"><g transform="rotate(-38 14 13)">
   <rect x="4" y="5" width="18" height="9" rx="2.5" fill="#f5c542" stroke="#3d2614" stroke-width="2.2"/>
@@ -168,7 +168,7 @@ const GAVEL = `<svg class="gavel" viewBox="0 0 32 32" aria-hidden="true"><g tran
 
 function avatarHTML(p) {
   const k = AVATAR_KEY[p % AVATAR_KEY.length];
-  if (avatarOk[k]) return `<div class="avatar" style="background-image:url(${A}avatar_${k}.webp);background-size:128%;background-position:50% 28%"></div>`;
+  if (avatarOk[k]) return `<div class="avatar" style="background-image:url(${A}avatar_${k}.webp?v=2);background-size:128%;background-position:50% 28%"></div>`;
   return `<div class="avatar" style="background-image:url(${tierImg(AVATAR_ANIMAL[p % AVATAR_ANIMAL.length])})"></div>`;
 }
 /** Sichtbarer Tierbestand: Karten, die gerade im Kuhhandel in der Mitte liegen, fehlen im Inventar. */
