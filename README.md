@@ -15,6 +15,11 @@ uv venv --python 3.12 .venv && uv pip install --python .venv/bin/python torch nu
 ```
 Dann http://localhost:8765 öffnen. `?fast` in der URL lässt die Bots ohne Pause spielen (zum Testen).
 
+- Gegner: trainierte KI in drei Stufen (Leicht = Trainingsstand 60, Mittel = 150, Schwer = bester Stand) oder einfache Bots.
+- ⚙️-Menü: Tempo, Spielverlauf, Regeln, Ton an/aus, Versteigerung überspringen, KI-Training live, neues Spiel.
+- Es steuert immer nur ein Browser-Tab das Spiel; ein anderer Tab kann mit „Hier weiterspielen“ übernehmen.
+- Zum Testen parallel: `.venv/bin/python server.py 8766` (eigener Spielstand).
+
 ## KI trainieren
 
 ```bash
@@ -54,3 +59,5 @@ python3 -m unittest -v tests.test_engine
 - Unbeteiligte erfahren nur, wie sich der Tierbestand geändert hat. Das Geld der Gegner ist nur als grober Stapel zu sehen.
 - Gleichstand in der Wertung: Das Bargeld entscheidet.
 - Nach 400 Kuhhandeln endet das Spiel zur Sicherheit, da Zyklen theoretisch möglich sind.
+- Wer mit wem um welches Tier handelt, sehen alle (wie am echten Tisch); die Gebote sehen nur die Beteiligten. Die KI bekommt dieselben Informationen.
+- Im Training kostet jedes Auffliegen beim Bluffen einen kleinen Malus (`--bust-penalty`, Standard 0.05, aktuell mit 0.03 trainiert). Die Spielregeln selbst bleiben unverändert.
