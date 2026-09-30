@@ -363,3 +363,19 @@ button { font-family: inherit; cursor: pointer; }
   background: rgba(0,0,0,.45); border-radius: 99px; padding: 1px 8px; opacity: 0; transition: opacity .15s; white-space: nowrap; }
 .tstack:hover .lab { opacity: 1; }
 .tstack:hover .card { transform: translateY(-4px); }
+
+/* Kuhhandel in der Mitte */
+#revealed .tcards { position: relative; }
+#revealed .tcard { box-shadow: 0 2px 3px rgba(0,0,0,.35), 0 10px 20px rgba(0,0,0,.4); }
+#revealed .tname { position: absolute; top: calc(var(--mid-h) + 14px); transform: translateX(0); white-space: nowrap;
+  background: rgba(0,0,0,.5); color: var(--paper); font-size: 13px; font-weight: 600; padding: 1px 9px; border-radius: 99px; }
+#revealed .tname.l { left: 0; }
+#stage.p2 #pile-area { width: 250px; }
+#stage.p2 #center { gap: 140px; }
+/* Anzahl bei Geldstapeln: sichtbar im nicht überdeckten Streifen */
+.mstack > .cnt { right: auto; left: 34px; top: -13px; }
+.ogroup.pick:hover::before {
+  content: "⚔ Herausfordern"; position: absolute; left: 50%; top: -30px; transform: translateX(-50%) scale(.8); z-index: 30;
+  background: var(--gold); color: var(--wood); border: 2px solid var(--wood); border-radius: 99px; padding: 1px 10px;
+  font-size: 13px; font-weight: 700; white-space: nowrap; box-shadow: 0 3px 8px rgba(0,0,0,.4);
+}

@@ -91,7 +91,7 @@
   <div class="grid3">
     <div class="card"><h2>Entropie</h2><p class="sub">Wie zufällig die KI noch spielt (sinkt = entschlossener)</p><div id="c3"></div></div>
     <div class="card"><h2>Value-Fehler</h2><p class="sub">Wie gut sie ihre Siegchance einschätzt (kleiner = besser)</p><div id="c4"></div></div>
-    <div class="card"><h2>Tempo</h2><p class="sub">Entscheidungen pro Sekunde im Training</p><div id="c5"></div></div>
+    <div class="card"><h2>Auffliegen pro Partie</h2><p class="sub">Wie oft die KI beim Bluffen zahlungsunfähig wird</p><div class="legend" id="lg5"></div><div id="c5"></div></div>
   </div>
 
   <details>
@@ -238,6 +238,7 @@ function draw(data) {
     <div class="tile"><div class="k">Iteration</div><div class="v">${last.iter}</div><div class="s">${last.games_total ? (+last.games_total).toLocaleString("de-DE") + " Partien gespielt" : ""}</div></div>
     <div class="tile"><div class="k">Trainingszeit</div><div class="v">${hrs >= 1 ? hrs.toFixed(1) + " h" : Math.round(+last.time_min) + " min"}</div><div class="s">${(+last.sps).toLocaleString("de-DE")} Entscheidungen/s</div></div>
     <div class="tile"><div class="k">Gegen einfache Bots</div><div class="v">${le ? pct(+le.eval_winrate) : "–"}</div><div class="s">Bestwert ${pct(best)} · Zufall ${pct(RANDOM)}</div></div>
+    <div class="tile"><div class="k">Auffliegen pro Partie</div><div class="v">${le && le.eval_busts ? (+le.eval_busts).toFixed(1) : "–"}</div><div class="s">${last.bust_penalty ? `Malus ${last.bust_penalty} pro Auffliegen` : "ohne Malus"}</div></div>
     <div class="tile"><div class="k">Gegen ältere Version</div><div class="v">${lo ? pct(+lo.vs_old_winrate) : "–"}</div><div class="s">${lo ? `gegen Iteration ${lo.vs_old_iter}` : "ab Iteration ~60"}</div></div>`;
 
   const colors = [css("--series-1"), css("--series-2"), css("--series-3")];
@@ -255,7 +256,12 @@ function draw(data) {
   const one = (col, name) => [{ name, color: css("--series-1"), points: smooth(rows.filter((r) => r[col]).map((r) => [r.iter, +r[col]])) }];
   lineChart($("#c3"), one("ent", "Entropie"), { height: 170, fmt: (v) => v.toFixed(2) });
   lineChart($("#c4"), one("vl", "Value-Fehler"), { height: 170, fmt: (v) => v.toFixed(3) });
-  lineChart($("#c5"), one("sps", "Entscheidungen/s"), { height: 170, fmt: (v) => Math.round(v).toLocaleString("de-DE") });
+  const s5 = [
+    { name: "gegen Bots", color: css("--series-1"), points: rows.filter((r) => r.eval_busts).map((r) => [r.iter, +r.eval_busts]) },
+    { name: "Self-Play", color: css("--series-2"), points: smooth(rows.filter((r) => r.busts_per_game).map((r) => [r.iter, +r.busts_per_game])) },
+  ];
+  legend($("#lg5"), s5);
+  lineChart($("#c5"), s5, { height: 170, yMin: 0, fmt: (v) => v.toFixed(1) });
 
   const recent = evals.slice(-15).reverse();
   $("#table").innerHTML = `<table><thead><tr><th>Iteration</th><th>Zeit</th><th>vs Bots</th><th>3 Sp.</th><th>4 Sp.</th><th>5 Sp.</th><th>vs ältere Version</th></tr></thead><tbody>

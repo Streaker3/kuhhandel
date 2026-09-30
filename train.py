@@ -60,7 +60,7 @@ def _assign_seats(rng, n, n_league, p_league, p_heur):
 
 def rollout_worker(args):
     """Spielt `games` Partien gebündelt; liefert Trainingsdaten der 'cur'-Sitze."""
-    (state, league_states, hidden, games, seed, gamma, lam, mode, p_league, p_heur) = args
+    (state, league_states, hidden, games, seed, gamma, lam, mode, p_league, p_heur, bust_penalty) = args
     torch.set_num_threads(1)
     rng = random.Random(seed)
     torch.manual_seed(seed)
@@ -78,13 +78,25 @@ def rollout_worker(args):
             n = rng.choices(PLAYER_COUNTS, PLAYER_WEIGHTS)[0]
             seats = _assign_seats(rng, n, len(league), p_league, p_heur)
         g = Game(n, seed=rng.randrange(1 << 30))
-        return {"g": g, "seats": seats, "traj": defaultdict(list)}
+        return {"g": g, "seats": seats, "traj": defaultdict(list), "ev": 0}
 
     BATCH = min(games, 48)
     active = [new_game() for _ in range(BATCH)]
     started = BATCH
     out = {k: [] for k in ("obs", "mask", "act", "logp", "adv", "ret")}
-    stats = {"games": 0, "cur_wins": 0.0, "cur_seats": 0, "steps": 0, "by_n": defaultdict(lambda: [0, 0])}
+    stats = {"games": 0, "cur_wins": 0.0, "cur_seats": 0, "steps": 0, "busts": 0,
+             "by_n": defaultdict(lambda: [0, 0])}
+
+    def after_step(slot):
+        """Auffliegen (Zahlungsunfähigkeit) der KI zählen und mit einem kleinen Malus belegen."""
+        g = slot["g"]
+        for ev in g.events[slot["ev"]:]:
+            if ev.get("kind") == "bust" and slot["seats"][ev["player"]] == "cur":
+                stats["busts"] += 1
+                tr = slot["traj"][ev["player"]]
+                if tr:
+                    tr[-1][5] -= bust_penalty
+        slot["ev"] = len(g.events)
 
     def finish(slot):
         g = slot["g"]
@@ -102,11 +114,12 @@ def rollout_worker(args):
             if mode != "train" or not tr:
                 continue
             vals = np.array([t[4] for t in tr] + [0.0], dtype=np.float32)
+            shaped = [t[5] for t in tr]
             T = len(tr)
             adv = np.zeros(T, dtype=np.float32)
             last = 0.0
             for t in reversed(range(T)):
-                rew = r if t == T - 1 else 0.0
+                rew = shaped[t] + (r if t == T - 1 else 0.0)
                 nxt = 0.0 if t == T - 1 else vals[t + 1]
                 delta = rew + gamma * nxt - vals[t]
                 last = delta + gamma * lam * last
@@ -127,6 +140,7 @@ def rollout_worker(args):
                     for i in idxs:
                         g = active[i]["g"]
                         g.step(heur.act(g))
+                        after_step(active[i])
                     continue
                 net = cur if key == "cur" else league[key[1]]
                 obs = np.stack([observe(active[i]["g"]) for i in idxs])
@@ -141,9 +155,10 @@ def rollout_worker(args):
                     p = g.to_act
                     ai = int(a[j])
                     if key == "cur":
-                        slot["traj"][p].append((obs[j], mask[j], ai, float(logp[j]), float(v[j])))
+                        slot["traj"][p].append([obs[j], mask[j], ai, float(logp[j]), float(v[j]), 0.0])
                         stats["steps"] += 1
                     g.step(decode_action(g, ai))
+                    after_step(slot)
             nxt = []
             for slot in active:
                 if slot["g"].phase == "over":
@@ -213,15 +228,15 @@ def evaluate(pool, net, args, games, opponent=None):
     per = max(1, games // args.workers)
     league = [opponent] if opponent is not None else []
     mode = "evalvs" if opponent is not None else "eval"
-    jobs = [(state, league, args.hidden, per, random.randrange(1 << 30), 1.0, 0.95, mode, 0, 0)
+    jobs = [(state, league, args.hidden, per, random.randrange(1 << 30), 1.0, 0.95, mode, 0, 0, 0.0)
             for _ in range(args.workers)]
-    wins = seats = 0
+    wins = seats = busts = 0
     by_n = defaultdict(lambda: [0, 0])
     for _, st in pool.map(rollout_worker, jobs):
-        wins += st["cur_wins"]; seats += st["cur_seats"]
+        wins += st["cur_wins"]; seats += st["cur_seats"]; busts += st["busts"]
         for n, (w, s) in st["by_n"].items():
             by_n[n][0] += w; by_n[n][1] += s
-    return wins / max(1, seats), {n: w / s for n, (w, s) in sorted(by_n.items())}
+    return wins / max(1, seats), {n: w / s for n, (w, s) in sorted(by_n.items())}, busts / max(1, seats)
 
 
 def main():
@@ -244,6 +259,8 @@ def main():
     ap.add_argument("--eval-every", type=int, default=10)
     ap.add_argument("--eval-games", type=int, default=700)
     ap.add_argument("--resume", action="store_true")
+    ap.add_argument("--bust-penalty", type=float, default=0.05,
+                    help="Malus pro Auffliegen (Siegbelohnung = 1); Spielregeln bleiben unverändert")
     args = ap.parse_args()
 
     CKPT.mkdir(exist_ok=True)
@@ -262,7 +279,7 @@ def main():
         print(f"Fortsetzen ab Iteration {start_it}, Liga: {len(league)} Versionen")
 
     header = ["iter", "time_min", "games_total", "steps", "selfplay_winrate", "eval_winrate", "eval_by_n",
-              "vs_old_winrate", "vs_old_iter", "vs_old_by_n", "pg", "vl", "ent", "kl", "clipfrac", "sps"]
+              "vs_old_winrate", "vs_old_iter", "vs_old_by_n", "busts_per_game", "eval_busts", "bust_penalty", "pg", "vl", "ent", "kl", "clipfrac", "sps"]
     log_path = RUNS / "log.csv"
     old_rows = []
     if args.resume and log_path.exists():
@@ -296,7 +313,7 @@ def main():
             state = {k: v.clone() for k, v in net.state_dict().items()}
             per = max(1, args.games // args.workers)
             jobs = [(state, league, args.hidden, per, random.randrange(1 << 30), args.gamma, args.lam,
-                     "train", p_league, p_heur) for _ in range(args.workers)]
+                     "train", p_league, p_heur, args.bust_penalty) for _ in range(args.workers)]
             results = pool.map(rollout_worker, jobs)
             data = [r for r, _ in results if r is not None]
             batch = {k: np.concatenate([d[k] for d in data]) for k in data[0]}
@@ -313,14 +330,15 @@ def main():
             games0 = games_total
             row = {}
             if it % args.eval_every == 0:
-                wr, by_n = evaluate(pool, net, args, args.eval_games)
+                wr, by_n, eb = evaluate(pool, net, args, args.eval_games)
+                row["eval_busts"] = f"{eb:.3f}"
                 row["eval_winrate"] = f"{wr:.3f}"
                 row["eval_by_n"] = " ".join(f"{n}:{v:.2f}" for n, v in by_n.items())
                 # gegen die eigene Version von vor ~50 Iterationen (Fortschritt trotz Sättigung gegen Heuristik)
                 old = [s for s in snap_iters if s <= it - 50]
                 if old:
                     ck_old = torch.load(CKPT / f"snap_{old[-1]:05d}.pt", weights_only=False)
-                    wr_o, by_o = evaluate(pool, net, args, args.eval_games, opponent=ck_old["model"])
+                    wr_o, by_o, _ = evaluate(pool, net, args, args.eval_games, opponent=ck_old["model"])
                     row["vs_old_winrate"] = f"{wr_o:.3f}"
                     row["vs_old_iter"] = old[-1]
                     row["vs_old_by_n"] = " ".join(f"{n}:{v:.2f}" for n, v in by_o.items())
@@ -339,6 +357,8 @@ def main():
 
             row.update({"iter": it, "time_min": f"{mins:.1f}", "games_total": games_total, "steps": steps,
                         "selfplay_winrate": f"{wins / max(1, seats):.3f}", "pg": f"{info['pg']:.4f}",
+                        "busts_per_game": f"{sum(s['busts'] for _, s in results) / max(1, seats):.3f}",
+                        "bust_penalty": args.bust_penalty,
                         "vl": f"{info['vl']:.4f}", "ent": f"{info['ent']:.3f}", "kl": f"{info['kl']:.4f}",
                         "clipfrac": f"{info['clipfrac']:.3f}", "sps": f"{sps:.0f}"})
             log.writerow(row)

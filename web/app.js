@@ -64,7 +64,7 @@ function accept(view) {
 function scheduleBot(events) {
   clearTimeout(botTimer);
   if (!V || !V.bot_turn) return;
-  const big = events.some((e) => ["sold", "bought", "free", "bust", "trade_result", "donkey", "phase"].includes(e.kind));
+  const big = events.some((e) => ["sold", "bought", "free", "bust", "trade_result", "donkey", "phase", "challenge"].includes(e.kind));
   const [, normal, pause] = SPEEDS[speed];
   const delay = FAST ? 15 : big ? pause : normal;
   botTimer = setTimeout(async () => accept(await api("/api/bot_step", {})), delay);
@@ -128,13 +128,13 @@ function packPositions(widths, avail, gap) {
 
 // Sitzpositionen der Gegner [Mitte x, Oberkante y, Breite] je Anzahl Gegner
 const SEAT_POS = {
-  1: [[800, 62, 600, 1]],
-  2: [[590, 62, 400, 1], [1010, 62, 400, 1]],
-  3: [[225, 120, 330, 2], [800, 62, 460, 1], [1375, 120, 330, 2]],
-  4: [[225, 120, 330, 2], [590, 62, 400, 1], [1010, 62, 400, 1], [1375, 120, 330, 2]],
+  1: [[800, 62, 440, 1]],
+  2: [[600, 62, 320, 1], [1000, 62, 320, 1]],
+  3: [[215, 120, 250, 2], [800, 62, 340, 1], [1385, 120, 250, 2]],
+  4: [[215, 120, 250, 2], [600, 62, 300, 1], [1000, 62, 300, 1], [1385, 120, 250, 2]],
 };
 const MONEY_FAN = [0, 2, 3, 5, 7, 9]; // grobe Stapelgröße -> gezeigte Rückseiten (nicht exakt)
-const ROW_STEP = 100;                 // vertikaler Abstand zweier Kartenreihen bei seitlichen Gegnern
+const ROW_STEP = 88;                 // vertikaler Abstand zweier Kartenreihen bei seitlichen Gegnern
 
 /** Breite einer Tiergruppe: komplette Quartette liegen eng als ein Stapel. */
 const groupWidth = (c, w, dx) => (c === 4 ? w + 3 * 3 : w + (c - 1) * dx);
@@ -257,8 +257,9 @@ function renderCenter() {
   const rev = $("#revealed");
   if (rev.dataset.key !== key) {
     rev.dataset.key = key;
-    rev.innerHTML = shown === null ? ""
-      : `<div class="flip in"><div class="face b"></div><div class="face f" style="background-image:url(${tierImg(animalKey(shown))})"></div></div>`;
+    if (shown === null) rev.innerHTML = "";
+    else if (t && V.phase === "trade") rev.innerHTML = tradeCardsHTML(t);
+    else rev.innerHTML = `<div class="flip in"><div class="face b"></div><div class="face f" style="background-image:url(${tierImg(animalKey(shown))})"></div></div>`;
   }
   // verdeckter Geldstapel des Herausforderers liegt neben der Karte auf dem Tisch
   const ts = $("#tstack");
@@ -272,7 +273,7 @@ function renderCenter() {
     ts.title = cnt === null ? "" : `${cnt} verdeckte Geldkarte${cnt === 1 ? "" : "n"}`;
   }
   const flip = rev.querySelector(".flip");
-  if (flip) flip.classList.toggle("glow", !!(au && au.high !== null) || !!t);
+  if (flip) flip.classList.toggle("glow", !!(au && au.high !== null));
 
   const plaque = $("#plaque");
   if (V.phase === "auction" && au) {
@@ -295,7 +296,8 @@ function renderCenter() {
     plaque.innerHTML = `
       <div class="lbl">Kuhhandel</div>
       <div class="who" style="font-size:18px;margin:4px 0">${nameOf(t.challenger)} <span style="opacity:.6">⚔</span> ${nameOf(t.target)}</div>
-      <div>${t.k}× ${V.animals[t.animal].name}</div>
+      <div>${t.k}× ${V.animals[t.animal].name} gegen ${t.k}× ${V.animals[t.animal].name}</div>
+      ${!t.involved ? `<hr><div class="who" style="font-size:14px">${t.stage === "offer" ? `${nameOf(t.challenger)} legt ein verdecktes Gebot…` : `${nameOf(t.target)} überlegt…`}</div>` : ""}
       ${cnt !== undefined ? `<hr><div class="lbl">Verdecktes Gebot</div>
         <div>${cnt} Karte${cnt === 1 ? "" : "n"} liegen auf dem Tisch${t.my_offer !== undefined ? ` · Wert <b>${t.my_offer}</b>` : ""}</div>` : ""}`;
   } else if (V.phase === "trade") {
@@ -303,10 +305,27 @@ function renderCenter() {
     plaque.innerHTML = `
       <div class="lbl">Phase 2</div>
       <div class="amt" style="font-size:36px">Kuhhandel</div>
-      <div class="who" style="margin-top:6px">${V.trade_busy ? "Zwei Spieler verhandeln verdeckt…" : cur === null ? "" : cur === V.me ? "Du bist am Zug" : `${nameOf(cur)} ist am Zug`}</div>`;
+      <div class="who" style="margin-top:6px">${cur === null ? "" : cur === V.me ? "Du bist am Zug" : `${nameOf(cur)} ist am Zug`}</div>`;
   } else {
     plaque.innerHTML = `<div class="amt" style="font-size:36px">Spielende</div>`;
   }
+}
+
+/** Kuhhandel in der Mitte: links die Karten des Herausforderers, rechts die des Gegners. */
+function tradeCardsHTML(t) {
+  const img = tierImg(animalKey(t.animal));
+  const n = 2 * t.k;
+  let cards = "";
+  for (let i = 0; i < n; i++) {
+    const side = i < t.k ? 0 : 1;
+    const x = i * 30 + side * 26;
+    const r = (i - (n - 1) / 2) * 5;
+    cards += `<div class="card mid tcard" style="left:${x}px;top:${Math.abs(r) * 0.8}px;transform:rotate(${r}deg);background-image:url(${img})"></div>`;
+  }
+  const w = (n - 1) * 30 + 26;
+  return `<div class="tcards">${cards}
+    <span class="tname l">${nameOf(t.challenger)}</span>
+    <span class="tname r" style="left:${w}px">${nameOf(t.target)}</span></div>`;
 }
 
 function renderTopButtons() {
@@ -479,7 +498,7 @@ function renderActions() {
   if (!mine) {
     selectMode = null;
     let txt = V.to_act === null ? "" : `${nameOf(V.to_act)} ist am Zug`;
-    if (V.phase === "trade" && V.trade_busy) txt = "Andere Spieler verhandeln verdeckt";
+    if (V.phase === "trade" && V.trade && !V.trade.involved) txt = `${nameOf(V.trade.challenger)} und ${nameOf(V.trade.target)} handeln`;
     if (V.phase === "auction" && V.auction && V.auction.auctioneer === V.me && V.auction.stage === "bidding") txt = `Du versteigerst – ${txt}`;
     box.innerHTML = `<div class="waiting">${txt}<span class="dots"></span></div>`;
     return;
@@ -602,7 +621,7 @@ function planFlights(prev, events) {
       for (const who of [ev.challenger, ev.target]) {
         const from = areaRect(who, ev.animal);
         for (let i = 0; i < ev.k && from; i++) {
-          out.push({ img: tierImg(prev.animals[ev.animal].key), from, to: { center: true }, delay: i * 120 + (who === ev.target ? 200 : 0) });
+          out.push({ img: tierImg(prev.animals[ev.animal].key), from, to: { center: true, idx: (who === ev.target ? ev.k : 0) + i }, delay: i * 120 + (who === ev.target ? 250 : 0) });
         }
       }
     }
@@ -613,9 +632,15 @@ function planFlights(prev, events) {
       }
     }
     if (ev.kind === "trade_result") {
-      const from = areaRect(ev.loser, ev.animal);
-      for (let i = 0; i < ev.k && from; i++) {
-        out.push({ img: tierImg(prev.animals[ev.animal].key), from, to: { p: ev.winner, animal: ev.animal }, delay: i * 140 });
+      const centerCards = [...document.querySelectorAll("#revealed .tcard")];
+      if (centerCards.length) {
+        centerCards.forEach((c, i) => out.push({ img: tierImg(prev.animals[ev.animal].key), from: c.getBoundingClientRect(),
+          to: { p: ev.winner, animal: ev.animal }, delay: 250 + i * 120 }));
+      } else {
+        const from = areaRect(ev.loser, ev.animal);
+        for (let i = 0; i < ev.k && from; i++) {
+          out.push({ img: tierImg(prev.animals[ev.animal].key), from, to: { p: ev.winner, animal: ev.animal }, delay: i * 140 });
+        }
       }
     }
   }
@@ -624,7 +649,7 @@ function planFlights(prev, events) {
 
 function runFlights(flights) {
   for (const f of flights) {
-    const to = f.to.center ? $("#revealed").getBoundingClientRect()
+    const to = f.to.center ? (document.querySelectorAll("#revealed .tcard")[f.to.idx] || $("#revealed")).getBoundingClientRect()
       : f.to.stack ? $("#tstack").getBoundingClientRect()
       : f.to.money ? moneyRect(f.to.p) : areaRect(f.to.p, f.to.animal);
     if (!to) continue;

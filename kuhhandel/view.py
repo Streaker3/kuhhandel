@@ -55,15 +55,15 @@ def player_view(g: Game, me: int, event_start: int = 0) -> dict:
             "min_bid": au["amount"] + 10,
         }
     t = g.trade
-    if t is not None and me in (t["challenger"], t["target"]):
+    if t is not None:
+        # Wer mit wem um welches Tier handelt, sieht jeder; Gebote nur die Beteiligten
         tv = {k: t[k] for k in ("challenger", "target", "animal", "k", "stage")}
-        if t["offer"] is not None:
+        tv["involved"] = me in (t["challenger"], t["target"])
+        if t["offer"] is not None and tv["involved"]:
             tv["offer_count"] = sum(t["offer"])
             if me == t["challenger"]:
                 tv["my_offer"] = notes_value(t["offer"])
         view["trade"] = tv
-    elif t is not None:
-        view["trade_busy"] = True  # Unbeteiligte sehen nur, dass verhandelt wird
     if g.phase == "trade" and g.to_act == me and t is None:
         view["options"] = [{"target": q, "animal": a} for q, a in g.trade_options(me)]
     if g.phase == "over":

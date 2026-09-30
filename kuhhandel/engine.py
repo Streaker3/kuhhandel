@@ -392,7 +392,7 @@ class Game:
                       "stage": "offer", "offer": None, "counter": None,
                       "cash_before": (self.cash_value(p), self.cash_value(target))}
         msg = f"{self.names[p]} fordert {self.names[target]} heraus: {k}× {NAMES[animal]}."
-        self._log(None, {p: msg, target: msg}, kind="challenge",
+        self._log(msg, {}, kind="challenge",
                   challenger=p, target=target, animal=animal, k=k)
 
     def _do_offer(self, notes):
