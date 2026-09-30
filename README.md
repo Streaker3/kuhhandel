@@ -1,72 +1,80 @@
 # Kuhhandel KI
 
-Engine, Oberfläche und (bald) trainierbare KI für eine Hausregel-Variante von „Kuhhandel“.
+Ein Browser-Kartenspiel nach einer Hausregel-Variante von „Kuhhandel“, mit KI-Gegnern, die per
+Reinforcement Learning (PPO, Self-Play) trainiert wurden.
 
-## Einrichtung (einmalig)
-
-```bash
-uv venv --python 3.12 .venv && uv pip install --python .venv/bin/python torch numpy
-```
+> Inoffizielles Fan-Projekt – nicht verbunden mit Ravensburger. „Kuhhandel“ ist ein Spiel von Ravensburger.
 
 ## Spielen
 
-Doppelklick auf **`Kuhhandel starten.command`** im Projektordner: Der Server startet, der Browser öffnet sich.
-Das Terminal-Fenster offen lassen, solange du spielst; schließen beendet den Server.
+**Online:** https://streaker3.github.io/kuhhandel/
 
-Oder im Terminal:
+**Lokal:** Doppelklick auf `Kuhhandel starten.command` oder
 
 ```bash
-.venv/bin/python server.py
+python3 server.py        # -> http://localhost:8765
 ```
 
-Der Spielstand wird nach jedem Zug in `saves/spielstand.pkl` gespeichert und beim nächsten Start automatisch fortgesetzt.
-Dann http://localhost:8765 öffnen. `?fast` in der URL lässt die Bots ohne Pause spielen (zum Testen).
+Das Spiel läuft komplett im Browser: Regel-Engine, KI-Netze und Spielstand. Der Spielstand wird im Browser gespeichert,
+sodass man nach dem Neuladen weiterspielen kann.
 
 - Gegner: trainierte KI in drei Stufen oder einfache Bots. Siegquote gegen die einfachen Bots (4 Spieler, Zufall 25 %):
   Leicht = früher Trainingsstand (~37 %), Mittel = beste KI entscheidet 55 % der Züge, sonst ein einfacher Bot (~56 %),
   Schwer = beste KI (~82 %).
-- ⚙️-Menü: Tempo, Spielverlauf, Regeln, Ton an/aus, Versteigerung überspringen, KI-Training live, neues Spiel.
-- Es steuert immer nur ein Browser-Tab das Spiel; ein anderer Tab kann mit „Hier weiterspielen“ übernehmen.
-- Zum Testen parallel: `.venv/bin/python server.py 8766` (eigener Spielstand).
+- ⚙️-Menü: Tempo, Spielverlauf, Regeln, Ton an/aus, Versteigerung überspringen, neues Spiel.
 
-## KI trainieren
+## Aufbau
 
-```bash
-.venv/bin/python train.py --hours 8          # neues Training, stoppt nach 8 Stunden
-.venv/bin/python train.py --resume --hours 8 # weitertrainieren
-.venv/bin/python evaluate.py                 # Siegquote gegen die Heuristik-Bots
-```
+| Teil | Python (Training) | JavaScript (Spiel im Browser) |
+|---|---|---|
+| Regel-Engine | `kuhhandel/engine.py` | `web/js/kuhhandel.js` |
+| KI-Beobachtung, Aktionen | `kuhhandel/encode.py` | `web/js/kuhhandel.js` |
+| Spielansicht | `kuhhandel/view.py` | `web/js/kuhhandel.js` |
+| Netz, einfache Bots | `kuhhandel/model.py`, `bots.py` | `web/js/ai.js` |
+| Spielleiter, Speichern | – | `web/js/local.js` |
+| Oberfläche | – | `web/index.html`, `app.js`, `style.css` |
 
-- Checkpoints landen in `checkpoints/`. `best.pt` ist die bisher stärkste Version gegen die Heuristik, und die Oberfläche nimmt sie automatisch als Gegner.
-- Der Verlauf steht in `runs/log.csv`. Die Spalte `eval_winrate` ist die Siegquote gegen die Heuristik-Bots. Zum Vergleich: Bei 3 bis 5 Spielern läge Zufall bei etwa 26 %.
-- Das Verfahren ist PPO mit Self-Play. Belohnung gibt es nur für den Sieg (+1). Gegner sind die aktuelle Version, ältere Versionen (die Liga) und die Heuristik-Bots.
+Beide Engines müssen sich exakt gleich verhalten, weil die KI in Python trainiert und im Browser gespielt wird.
 
 ## Tests
 
 ```bash
-python3 -m unittest -v tests.test_engine
+python3 -m unittest -v tests.test_engine                 # Regeltests
+.venv/bin/python tests/parity/make_traces.py 300         # Referenz-Partien aus Python
+node tests/parity/check.js                               # JS-Engine Zug für Zug gegen Python
+.venv/bin/python export_web_models.py && node tests/parity/check_nn.js   # Netz im Browser gegen PyTorch
 ```
 
-## Struktur
+## KI trainieren
 
-- `kuhhandel/engine.py` – Regel-Engine (Zustandsmaschine, Aktionen als Tupel)
-- `kuhhandel/view.py` – Spielansicht pro Spieler (nur erlaubte Informationen)
-- `kuhhandel/bots.py` – Zufalls- und Heuristik-Bots
-- `kuhhandel/encode.py` – Beobachtungsvektor, Aktionsraum (103 Aktionen) und Maske der erlaubten Aktionen
-- `kuhhandel/model.py` – Policy-/Value-Netz und `NNBot`
-- `train.py` / `evaluate.py` – Training und Auswertung
-- `server.py` – lokaler HTTP-Server (nur Standardbibliothek)
-- `web/` – Oberfläche; eigene Bilder unter `web/assets/` (siehe `BILD_PROMPTS.md`)
+Einmalig: `uv venv --python 3.12 .venv && uv pip install --python .venv/bin/python torch numpy`
 
-## Festgelegte Regeldetails (zusätzlich zur Spezifikation)
+```bash
+.venv/bin/python train.py --hours 8          # neues Training
+.venv/bin/python train.py --resume --hours 8 # weitertrainieren
+.venv/bin/python evaluate.py                 # Siegquote gegen die einfachen Bots
+.venv/bin/python export_web_models.py        # neue Netze fürs Spiel (web/models/) exportieren
+```
 
-- Bezahlt wird mit echten Scheinen **ohne Wechselgeld**. Die Engine überzahlt so wenig wie möglich und gibt dabei möglichst viele Scheine ab (keine 0er).
-- Das Bluff-Limit bezieht sich nur auf das Bargeld: `Bargeld × 2 + 100`. Wer es nicht mehr überbieten kann, passt automatisch.
-- Bei Zahlungsunfähigkeit wird das Bargeld öffentlich und bleibt bekannt, bis verdecktes Geld fließt. Die Ausschlüsse sammeln sich an; sind alle Bieter ausgeschlossen, bekommt der Versteigerer die Karte kostenlos.
-- Die Kuhhandel-Phase beginnt beim Spieler nach dem letzten Versteigerer. Herausfordern ist Pflicht, sobald es möglich ist.
-- Kuhhandel: Der Gegner sieht nur die Anzahl der Scheine. Bei einem Gegengebot werden die Stapel getauscht, also zahlt der Gewinner netto die Differenz. Bei Gleichstand gewinnt der Herausforderer und jeder nimmt seinen Stapel zurück.
-- Unbeteiligte erfahren nur, wie sich der Tierbestand geändert hat. Das Geld der Gegner ist nur als grober Stapel zu sehen.
-- Gleichstand in der Wertung: Das Bargeld entscheidet.
-- Nach 400 Kuhhandeln endet das Spiel zur Sicherheit, da Zyklen theoretisch möglich sind.
-- Wer mit wem um welches Tier handelt, sehen alle (wie am echten Tisch); die Gebote sehen nur die Beteiligten. Die KI bekommt dieselben Informationen.
-- Im Training kostet jedes Auffliegen beim Bluffen einen kleinen Malus (`--bust-penalty`, Standard 0.05, aktuell mit 0.03 trainiert). Die Spielregeln selbst bleiben unverändert.
+- Checkpoints in `checkpoints/`, Verlauf in `runs/log.csv`, live unter http://localhost:8765/training.html
+- PPO mit Self-Play, Belohnung +1 nur für den Sieg; Gegner sind die aktuelle Version, ältere Versionen (Liga) und
+  einfache Bots. Jedes Auffliegen beim Bluffen kostet im Training einen kleinen Malus (`--bust-penalty`); die
+  Spielregeln bleiben dabei unverändert.
+
+## Hausregeln (Abweichungen/Festlegungen)
+
+- **Versteigerung:** Gebote in 10er-Schritten; Passen gilt nur, bis jemand höher bietet. Bluffen bis
+  `2 × Bargeld + 100`. Der Versteigerer nimmt das Geld oder kauft selbst (Vorkaufsrecht). Wer nicht zahlen kann,
+  zeigt sein Geld und ist für diese Karte ausgeschlossen (Ausschlüsse sammeln sich). Esel-Bonus 50/100/200/500.
+- **Bezahlen ohne Wechselgeld:** minimale Überzahlung, dabei möglichst viele Scheine.
+- **Kuhhandel:** Herausforderer legt verdeckt Geldkarten; der Gegner nimmt an oder macht ein verdecktes Gegengebot.
+  Beim Gegengebot werden die Stapel getauscht (Gewinner zahlt netto die Differenz); Gleichstand gewinnt der
+  Herausforderer ohne Geldfluss. Wer mit wem um welches Tier handelt und wie viele Karten in den Stapeln liegen,
+  sehen alle – die Werte nur die Beteiligten. Herausfordern ist Pflicht, solange möglich.
+- **Wertung:** Summe der vollständigen Quartette × Anzahl der Quartette; Gleichstand entscheidet das Bargeld.
+- Nach 400 Kuhhandeln endet das Spiel zur Sicherheit (theoretisch mögliche Zyklen).
+
+## Bilder
+
+Eigene, KI-generierte Bilder. Die Prompts stehen in `bild_prompts/`, siehe `BILD_PROMPTS.md`.
+Web-Versionen erzeugen: `.venv/bin/python convert_assets.py`.

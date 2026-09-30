@@ -52,18 +52,11 @@ let actionHoldUntil = 0;   // Aktionsfeld erst freigeben, wenn die neue Karte um
 let holdTimer = null;
 const REVEAL_PAUSE = 500;
 
-// --------------------------------------------------------------- API
-const CLIENT = Math.random().toString(36).slice(2); // dieser Tab
+// --------------------------------------------------------------- Spielleiter (läuft im Browser, siehe js/local.js)
 async function api(path, body) {
-  const r = await fetch(path, {
-    method: body ? "POST" : "GET",
-    headers: { "Content-Type": "application/json" },
-    body: body ? JSON.stringify({ ...body, since, client: CLIENT }) : undefined,
-  });
-  const j = await r.json();
-  if (j.error === "other_tab") { showOtherTab(); return null; }
+  const j = await Local.call(path, { ...(body || {}), since });
   if (j.error) {
-    // Ansicht war veraltet (z. B. anderer Tab) -> neu synchronisieren statt hängen zu bleiben
+    // Ansicht war veraltet -> neu synchronisieren statt hängen zu bleiben
     panelErr = j.error;
     panelErrUntil = Date.now() + 4000;
     resync();
@@ -73,22 +66,8 @@ async function api(path, body) {
 }
 async function resync() {
   clearTimeout(botTimer);
-  const r = await fetch(`/api/state?since=${since}`);
-  const v = await r.json();
+  const v = await Local.call("/api/state", { since });
   if (v && v.phase && v.phase !== "none") { busy = false; accept(v); }
-}
-function showOtherTab() {
-  clearTimeout(botTimer);
-  const ov = $("#overlay");
-  ov.innerHTML = `<div class="panel"><h1 style="font-size:40px">Anderer Tab</h1>
-    <p class="sub">Das Spiel wird gerade in einem anderen Browser-Tab gesteuert.</p>
-    <button class="big" id="takeover">Hier weiterspielen</button></div>`;
-  ov.classList.add("show");
-  $("#takeover").onclick = async () => {
-    const v = await api("/api/takeover", {});
-    $("#overlay").classList.remove("show");
-    if (v && v.phase !== "none") accept(v);
-  };
 }
 
 function accept(view) {
@@ -1455,12 +1434,12 @@ function bindStart() {
   segment("#in-level", "l", (v) => (level = v));
   document.querySelector(`#in-level [data-l="${level}"]`)?.click();
   document.querySelector(`#in-players [data-n="${nPlayers}"]`)?.click();
-  fetch("/api/info").then((r) => r.json()).then((info) => {
+  Local.call("/api/info").then((info) => {
     if (!info.ai_available) {
       $("#ai-note").textContent = "Noch keine trainierte KI gefunden – es spielen die einfachen Bots.";
       document.querySelector('#in-opp [data-o="heuristic"]').click();
     } else {
-      $("#ai-note").textContent = "Trainierte KI-Gegner";
+      $("#ai-note").textContent = "Trainierte KI-Gegner – läuft komplett in deinem Browser";
     }
   });
   $("#btn-start").onclick = async () => {
@@ -1503,9 +1482,11 @@ $("#m-sound").onclick = () => {
   Snd.on = !Snd.on;
   try { localStorage.setItem("kh-sound", Snd.on ? "1" : "0"); } catch (e) { /* egal */ }
   updSound();
+fetch("/api/training").then((r) => { if (!r.ok) throw new Error(); }).catch(() => { $("#m-train").style.display = "none"; });
   if (Snd.on) Snd.play("coins");
 };
 updSound();
+fetch("/api/training").then((r) => { if (!r.ok) throw new Error(); }).catch(() => { $("#m-train").style.display = "none"; });
 // Browser erlauben Ton erst nach einer Nutzeraktion
 document.addEventListener("pointerdown", () => Snd.init(), { once: true });
 $("#m-skip").onclick = async () => {

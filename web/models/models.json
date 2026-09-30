@@ -1,0 +1,50 @@
+{
+ "obs_dim": 207,
+ "layers": {
+  "body.0.weight": [
+   512,
+   207
+  ],
+  "body.0.bias": [
+   512
+  ],
+  "body.2.weight": [
+   512,
+   512
+  ],
+  "body.2.bias": [
+   512
+  ],
+  "body.4.weight": [
+   512,
+   512
+  ],
+  "body.4.bias": [
+   512
+  ],
+  "pi.weight": [
+   103,
+   512
+  ],
+  "pi.bias": [
+   103
+  ],
+  "v.weight": [
+   1,
+   512
+  ],
+  "v.bias": [
+   1
+  ]
+ },
+ "models": {
+  "leicht": {
+   "file": "models/leicht.bin",
+   "iter": 60
+  },
+  "schwer": {
+   "file": "models/schwer.bin",
+   "iter": 4610
+  }
+ }
+}

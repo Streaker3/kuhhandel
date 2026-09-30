@@ -12,3 +12,5 @@ web/assets/avatars/
 web/assets/**/*.jpeg
 web/assets/**/*.jpg
 saves/
+tests/parity/traces.json
+tests/parity/nn_samples.json
