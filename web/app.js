@@ -223,7 +223,7 @@ function render() {
   renderOfferPile();
   renderHand();
   renderActions();
-  $("#me-plate").style.bottom = `${58 + $("#actions").offsetHeight - 8}px`;
+  placePlate();
   if (Date.now() < panelErrUntil) $("#actions").insertAdjacentHTML("afterbegin", `<div class="perr">⚠️ ${panelErr}</div>`);
   renderTopButtons();
   if (V.phase === "over") showResults();
@@ -582,6 +582,10 @@ function zeroSubmit(kind) {
 const notesSum = (c) => c.reduce((s, x, i) => s + x * V.denoms[i], 0);
 const notesCount = (c) => c.reduce((s, x) => s + x, 0);
 
+// Spielerschild sitzt immer direkt auf dem Aktionsfeld – auch wenn es beim Tippen wächst
+const placePlate = () => { $("#me-plate").style.bottom = `${58 + $("#actions").offsetHeight - 8}px`; };
+new ResizeObserver(placePlate).observe($("#actions"));
+
 let keyHandler = null;
 document.addEventListener("keydown", (e) => {
   const menuOpen = $("#menu").classList.contains("open") || $("#log").classList.contains("open");
@@ -627,7 +631,7 @@ function renderActions() {
       .filter(([, x], i, arr) => arr.findIndex(([, y]) => y === x) === i);
     box.innerHTML = `
       <h4>Dein Gebot für ${V.animals[au.card].name} <span class="ctx">· ${context}</span></h4>${redo}
-      <div class="btns">
+      <div class="btns bidrow">
         <button class="btn small" id="bm">−10</button>
         <input class="bid-input" id="bv" type="text" inputmode="numeric" value="${bidValue}" autocomplete="off">
         <button class="btn small" id="bp">+10</button>
@@ -649,14 +653,15 @@ function renderActions() {
         msg = bidValue > V.cap ? `Über deinem Limit von ${V.cap}.` : bidValue < min ? `Zu wenig – mindestens ${min}.` : "Nur Vielfache von 10.";
       } else if (bidValue > P.cash) {
         cls += " warn";
-        msg = `Bluff! Du hast nur ${P.cash}. Nimmt der Versteigerer das Geld, fliegst du auf.`;
+        msg = `Bluff – du hast nur ${P.cash}. Nimmt der Versteigerer das Geld, fliegst du auf.`;
       }
       h.className = cls;
       h.textContent = msg;
       h.style.display = msg ? "" : "none";
       go.disabled = !valid();
-      go.textContent = valid() && bidValue > P.cash ? `Bluffen (${bidValue})` : "Bieten";
+      go.textContent = valid() && bidValue > P.cash ? "Bluffen" : "Bieten";
       go.classList.toggle("bluff", valid() && bidValue > P.cash);
+      placePlate();
       $("#bm").disabled = bidValue - 10 < min;
       $("#bp").disabled = bidValue + 10 > V.cap;
     };

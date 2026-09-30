@@ -445,7 +445,7 @@ button { font-family: inherit; cursor: pointer; }
 #actions { top: auto !important; bottom: 58px !important; width: 440px; padding: 10px 14px 12px; z-index: 6; }
 #actions h4 { font-size: 18px; margin-bottom: 8px; }
 #actions .hint { margin-top: 6px; }
-#me-plate { left: 800px !important; transform: translateX(-50%) !important; z-index: 7; transition: bottom .15s; }
+#me-plate { left: 800px !important; transform: translateX(-50%) !important; z-index: 7; }
 #me-plate .bubble { left: calc(100% + 12px); }
 .btns.quick { flex-wrap: nowrap; gap: 6px; }
 .btns.quick .btn { min-width: 0; padding: 4px 10px; font-size: 14px; white-space: nowrap; }
@@ -465,3 +465,20 @@ button { font-family: inherit; cursor: pointer; }
 }
 /* Aktionsfeld mit fester Mindesthöhe, damit das Spielerschild beim Zugwechsel nicht springt */
 #actions { min-height: 136px; display: flex; flex-direction: column; justify-content: center; }
+
+/* Gebotszeile immer einzeilig: −10 · Feld · +10 · Bieten/Bluffen · Passen */
+.btns.bidrow { flex-wrap: nowrap; gap: 6px; }
+.btns.bidrow .btn { padding: 7px 12px; white-space: nowrap; }
+.btns.bidrow #bgo { min-width: 86px; }
+#actions .hint { font-size: 14px; }
+/* Lichtkegel: Rechteck größer als die Lichtellipse -> an allen Rändern exakt 0, keine Kanten */
+.seat.spot::before {
+  top: -60px; width: 520px; height: 360px;
+  background: radial-gradient(ellipse 230px 125px at 50% 170px,
+    rgba(255,240,190,.55) 0%, rgba(255,236,170,.30) 40%, rgba(255,236,170,.10) 72%, rgba(255,236,170,0) 100%);
+}
+#me-plate.spot::before {
+  width: 560px; height: 340px; transform: translate(-50%, -50%);
+  background: radial-gradient(ellipse 240px 130px at 50% 50%,
+    rgba(255,240,190,.5) 0%, rgba(255,236,170,.28) 40%, rgba(255,236,170,.09) 72%, rgba(255,236,170,0) 100%);
+}
