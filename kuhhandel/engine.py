@@ -115,6 +115,19 @@ class Game:
     def cash_value(self, p: int) -> int:
         return notes_value(self.cash[p])
 
+    def _du(self, p) -> bool:
+        return self.names[p] == "Du"
+
+    def _sv(self, p, third: str, second: str) -> str:
+        """Subjekt + Verb: 'Berta bietet' bzw. 'Du bietest'."""
+        return f"Du {second}" if self._du(p) else f"{self.names[p]} {third}"
+
+    def _acc(self, p) -> str:
+        return "dich" if self._du(p) else self.names[p]
+
+    def _dat(self, p) -> str:
+        return "dir" if self._du(p) else self.names[p]
+
     def _log(self, pub, priv=None, **data):
         self.events.append({"pub": pub, "priv": priv or {}, **data})
 
@@ -175,7 +188,7 @@ class Game:
             "last_actor": None,
         }
         if not redo:
-            self._log(f"{self.names[a]} versteigert: {NAMES[card]}", kind="reveal", card=card, auctioneer=a)
+            self._log(f"{self._sv(a, 'versteigert', 'versteigerst')}: {NAMES[card]}", kind="reveal", card=card, auctioneer=a)
 
     def _auction_min_bid(self):
         return self.auction["amount"] + 10
@@ -233,7 +246,7 @@ class Game:
                     if not au["bidders"] or not self._auction_candidates():
                         if au["high"] is None:
                             a = au["auctioneer"]
-                            self._log(f"Niemand bietet – {self.names[a]} bekommt {NAMES[au['card']]} kostenlos.",
+                            self._log(f"Niemand bietet – {self._sv(a, 'bekommt', 'bekommst')} {NAMES[au['card']]} kostenlos.",
                                       kind="free", player=a, card=au["card"])
                             self._finish_card(a)
                             continue
@@ -274,7 +287,7 @@ class Game:
         self.to_act = None
         sc = self.scores()
         best = max(range(self.n), key=lambda p: (sc[p], self.cash_value(p)))
-        self._log(f"Spielende! {self.names[best]} gewinnt mit {sc[best]} Punkten.", kind="over")
+        self._log(f"Spielende! {self._sv(best, 'gewinnt', 'gewinnst')} mit {sc[best]} Punkten.", kind="over")
 
     # ------------------------------------------------------------------ public
     def scores(self):
@@ -341,7 +354,7 @@ class Game:
         au["passed"] = set()
         au["last"][p] = amount
         au["last_actor"] = p
-        self._log(f"{self.names[p]} bietet {amount}.", kind="bid", player=p, amount=amount)
+        self._log(f"{self._sv(p, 'bietet', 'bietest')} {amount}.", kind="bid", player=p, amount=amount)
 
     def _do_take(self):
         au = self.auction
@@ -350,7 +363,7 @@ class Game:
             notes = self._pay(h, a, amt)
             paid = notes_value(notes)
             extra = f" (ohne Wechselgeld: {paid})" if paid != amt else ""
-            self._log(f"{self.names[a]} nimmt das Geld: {self.names[h]} zahlt {amt}{extra} für {NAMES[au['card']]}.",
+            self._log(f"{self._sv(a, 'nimmt', 'nimmst')} das Geld: {self._sv(h, 'zahlt', 'zahlst')} {amt}{extra} für {NAMES[au['card']]}.",
                       kind="sold", player=h, card=au["card"], amount=paid)
             self._finish_card(h)
             return
@@ -359,8 +372,8 @@ class Game:
         for row in self.known:
             row[h] = self.cash_value(h)
         self._log(
-            f"{self.names[h]} kann {amt} nicht zahlen! Bargeld offengelegt: {self.cash_value(h)}. "
-            f"Versteigerung wird ohne {self.names[h]} wiederholt.",
+            f"{self._sv(h, 'kann', 'kannst')} {amt} nicht zahlen! Bargeld offengelegt: {self.cash_value(h)}. "
+            f"Versteigerung wird ohne {self._acc(h)} wiederholt.",
             kind="bust", player=h, notes=list(self.cash[h]))
         excluded = au["excluded"] | {h}
         self._start_auction(au["card"], excluded, redo=True)
@@ -371,7 +384,7 @@ class Game:
         notes = self._pay(a, h, amt)
         paid = notes_value(notes)
         extra = f" (ohne Wechselgeld: {paid})" if paid != amt else ""
-        self._log(f"{self.names[a]} nutzt das Vorkaufsrecht und zahlt {self.names[h]} {amt}{extra}.",
+        self._log(f"{self._sv(a, 'nutzt', 'nutzt')} das Vorkaufsrecht und {'zahlst' if self._du(a) else 'zahlt'} {self._dat(h)} {amt}{extra}.",
                   kind="bought", player=a, card=au["card"], amount=paid)
         self._finish_card(a)
 
@@ -391,7 +404,7 @@ class Game:
         self.trade = {"challenger": p, "target": target, "animal": animal, "k": k,
                       "stage": "offer", "offer": None, "counter": None,
                       "cash_before": (self.cash_value(p), self.cash_value(target))}
-        msg = f"{self.names[p]} fordert {self.names[target]} heraus: {k}× {NAMES[animal]}."
+        msg = f"{self._sv(p, 'fordert', 'forderst')} {self._acc(target)} heraus: {k}× {NAMES[animal]}."
         self._log(msg, {}, kind="challenge",
                   challenger=p, target=target, animal=animal, k=k)
 
@@ -407,7 +420,7 @@ class Game:
         word = "Schein" if cnt == 1 else "Scheine"
         self._log(None, {
             p: f"Du legst verdeckt {cnt} {word} ({notes_value(notes)}).",
-            t["target"]: f"{self.names[p]} legt verdeckt {cnt} {word} hin.",
+            t["target"]: f"{self._sv(p, 'legt', 'legst')} verdeckt {cnt} {word} hin.",
         }, kind="offer", count=cnt)
 
     def _give_cards(self, winner, loser):
@@ -418,8 +431,8 @@ class Game:
     def _close_trade(self, winner, loser, priv_msgs):
         t = self.trade
         self._give_cards(winner, loser)
-        pub = (f"Kuhhandel: {self.names[winner]} bekommt {t['k']}× {NAMES[t['animal']]} "
-               f"von {self.names[loser]}.")
+        pub = (f"Kuhhandel: {self._sv(winner, 'bekommt', 'bekommst')} {t['k']}× {NAMES[t['animal']]} "
+               f"von {self._dat(loser)}.")
         self._log(pub, priv_msgs, kind="trade_result", winner=winner, loser=loser,
                   animal=t["animal"], k=t["k"])
         c, g = t["challenger"], t["target"]
@@ -448,7 +461,7 @@ class Game:
         for i, x in enumerate(t["offer"]):
             self.cash[g][i] += x
         v = notes_value(t["offer"])
-        base = f"{self.names[g]} nimmt an. {self.names[c]} bekommt {t['k']}× {NAMES[t['animal']]}"
+        base = f"{self._sv(g, 'nimmt', 'nimmst')} an. {self._sv(c, 'bekommt', 'bekommst')} {t['k']}× {NAMES[t['animal']]}"
         self._close_trade(c, g, {c: f"{base} und zahlt {v}.", g: f"{base}; du erhältst {v}."})
 
     def _do_counter(self, notes):
@@ -465,7 +478,7 @@ class Game:
                 self.cash[c][i] += t["offer"][i]
                 self.cash[g][i] += notes[i]
             winner, loser = c, g
-            detail = f"Gleichstand ({vo}) – {self.names[c]} gewinnt, kein Geldfluss."
+            detail = f"Gleichstand ({vo}) – {self._sv(c, 'gewinnt', 'gewinnst')}, kein Geldfluss."
         else:
             # Stapel werden getauscht -> Gewinner zahlt netto die Differenz
             for i in range(len(DENOMS)):
@@ -473,7 +486,7 @@ class Game:
                 self.cash[g][i] += t["offer"][i]
             winner, loser = (c, g) if vo > vc else (g, c)
             detail = (f"Gebote: {self.names[c]} {vo}, {self.names[g]} {vc}. "
-                      f"{self.names[winner]} gewinnt und zahlt die Differenz {abs(vo - vc)}.")
+                      f"{self._sv(winner, 'gewinnt', 'gewinnst')} und {'zahlst' if self._du(winner) else 'zahlt'} die Differenz {abs(vo - vc)}.")
         self._close_trade(winner, loser, {c: detail, g: detail})
 
     # ------------------------------------------------------------ observation

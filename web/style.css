@@ -379,3 +379,24 @@ button { font-family: inherit; cursor: pointer; }
   background: var(--gold); color: var(--wood); border: 2px solid var(--wood); border-radius: 99px; padding: 1px 10px;
   font-size: 13px; font-weight: 700; white-space: nowrap; box-shadow: 0 3px 8px rgba(0,0,0,.4);
 }
+
+/* Versteigerer: Hammer-Symbol und Scheinwerfer */
+.gavel { width: 18px; height: 18px; vertical-align: -3px; }
+.badge.auct { background: var(--paper); }
+.badge.auct .gavel { width: 20px; height: 20px; }
+.pill.auct { display: inline-flex; align-items: center; gap: 4px; }
+.nameplate .role { display: inline-flex; align-items: center; gap: 3px; margin-left: 8px; padding: 0 8px; border-radius: 99px;
+  background: var(--gold); color: var(--wood); font-size: 12px; font-weight: 700; vertical-align: 2px; }
+.nameplate .role .gavel { width: 14px; height: 14px; }
+.seat.spot::before, #me-plate.spot::before {
+  content: ""; position: absolute; left: 50%; top: 50%; width: 420px; height: 300px; transform: translate(-50%, -46%);
+  background: radial-gradient(ellipse at 50% 45%, rgba(255,240,190,.55) 0%, rgba(255,236,170,.30) 32%, rgba(255,236,170,.10) 55%, rgba(255,236,170,0) 70%);
+  pointer-events: none; z-index: -1; animation: spot 2.6s ease-in-out infinite;
+}
+.seat.spot { z-index: 1; }
+@keyframes spot { 50% { opacity: .8; } }
+/* rechte Gegner: Sprechblase links vom Kopf, damit sie nicht über den Rand ragt */
+.seat.rside .bubble { left: auto; right: calc(100% + 12px); }
+.seat.rside .bubble::before { left: auto; right: -11px; border-right: 0; border-left: 8px solid var(--wood); }
+/* Stapel-Beschriftung über dem Stapel statt unter dem Gebotsfeld */
+#deck-count { bottom: auto; top: -34px; }

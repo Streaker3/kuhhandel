@@ -133,12 +133,20 @@ class Handler(BaseHTTPRequestHandler):
         since = int(body.get("since", 0))
         with lock:
             try:
+                client = body.get("client")
                 if path == "/api/new":
                     new_game(int(body.get("players", 4)), body.get("name", "Du"), body.get("opponents", "ai"))
+                    state["owner"] = client
                     return self._json(self._view(0))
+                if path == "/api/takeover":
+                    # Nur ein Tab steuert das Spiel: der zuletzt geöffnete übernimmt
+                    state["owner"] = client
+                    return self._json(self._view(since) if state["game"] else {"phase": "none"})
                 g = state["game"]
                 if g is None:
                     return self._json({"error": "Kein Spiel"}, 400)
+                if client != state.get("owner"):
+                    return self._json({"error": "other_tab"}, 409)
                 if path == "/api/act":
                     if g.to_act != HUMAN:
                         return self._json({"error": "Du bist nicht dran"}, 400)

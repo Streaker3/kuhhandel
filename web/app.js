@@ -30,6 +30,7 @@ let since = 0;             // Anzahl bereits gesehener Ereignisse
 let selected = [0, 0, 0, 0, 0, 0]; // für Kuhhandel ausgewählte Geldkarten je Stückelung
 let selectMode = null;     // "offer" | "counter" | null
 let bidValue = 0;
+let bidKey = "";         // ändert sich mit Karte/Wiederholung/Mindestgebot -> Gebotsfeld zurücksetzen
 let botTimer = null;
 let busy = false;
 let bidHistory = [];       // Gebote der laufenden Versteigerung
@@ -40,15 +41,41 @@ let holdTimer = null;
 const REVEAL_PAUSE = 500;
 
 // --------------------------------------------------------------- API
+const CLIENT = Math.random().toString(36).slice(2); // dieser Tab
 async function api(path, body) {
   const r = await fetch(path, {
     method: body ? "POST" : "GET",
     headers: { "Content-Type": "application/json" },
-    body: body ? JSON.stringify({ ...body, since }) : undefined,
+    body: body ? JSON.stringify({ ...body, since, client: CLIENT }) : undefined,
   });
   const j = await r.json();
-  if (j.error) { toast("⚠️ " + j.error); return null; }
+  if (j.error === "other_tab") { showOtherTab(); return null; }
+  if (j.error) {
+    // Ansicht war veraltet (z. B. anderer Tab) -> neu synchronisieren statt hängen zu bleiben
+    toast("⚠️ " + j.error);
+    resync();
+    return null;
+  }
   return j;
+}
+async function resync() {
+  clearTimeout(botTimer);
+  const r = await fetch(`/api/state?since=${since}`);
+  const v = await r.json();
+  if (v && v.phase && v.phase !== "none") { busy = false; accept(v); }
+}
+function showOtherTab() {
+  clearTimeout(botTimer);
+  const ov = $("#overlay");
+  ov.innerHTML = `<div class="panel"><h1 style="font-size:40px">Anderer Tab</h1>
+    <p class="sub">Das Spiel wird gerade in einem anderen Browser-Tab gesteuert.</p>
+    <button class="big" id="takeover">Hier weiterspielen</button></div>`;
+  ov.classList.add("show");
+  $("#takeover").onclick = async () => {
+    const v = await api("/api/takeover", {});
+    $("#overlay").classList.remove("show");
+    if (v && v.phase !== "none") accept(v);
+  };
 }
 
 function accept(view) {
@@ -74,7 +101,13 @@ function scheduleBot(events) {
   if (!V || !V.bot_turn) return;
   const big = events.some((e) => ["sold", "bought", "free", "bust", "trade_result", "donkey", "phase", "challenge"].includes(e.kind));
   const [, normal, pause] = SPEEDS[speed];
-  const delay = FAST ? 15 : big ? pause : normal;
+  let delay = FAST ? 15 : big ? pause : normal;
+  const trade = events.find((e) => e.kind === "trade_result");
+  if (trade && !FAST) {
+    delay += [2000, 1000, 0][speed];
+    // eigenen Handel etwas länger stehen lassen, damit man das Ergebnis lesen kann
+    if (trade.winner === V.me || trade.loser === V.me) delay = Math.max(delay, 3400);
+  }
   botTimer = setTimeout(async () => accept(await api("/api/bot_step", {})), delay);
 }
 
@@ -100,6 +133,13 @@ AVATAR_KEY.forEach((k) => {
   img.onload = () => { avatarOk[k] = true; if (V) { $("#seats").querySelectorAll(".seat").forEach((s) => { s.dataset.html = ""; }); render(); } };
   img.src = `${A}avatar_${k}.webp`;
 });
+const GAVEL = `<svg class="gavel" viewBox="0 0 32 32" aria-hidden="true"><g transform="rotate(-38 14 13)">
+  <rect x="4" y="5" width="18" height="9" rx="2.5" fill="#f5c542" stroke="#3d2614" stroke-width="2.2"/>
+  <rect x="3" y="6.5" width="3" height="6" rx="1" fill="#d9a41f" stroke="#3d2614" stroke-width="1.6"/>
+  <rect x="20" y="6.5" width="3" height="6" rx="1" fill="#d9a41f" stroke="#3d2614" stroke-width="1.6"/>
+  <rect x="11" y="14" width="4" height="15" rx="1.6" fill="#a86f38" stroke="#3d2614" stroke-width="2"/></g>
+  <rect x="17" y="25.5" width="13" height="4.5" rx="1.6" fill="#a86f38" stroke="#3d2614" stroke-width="2"/></svg>`;
+
 function avatarHTML(p) {
   const k = AVATAR_KEY[p % AVATAR_KEY.length];
   if (avatarOk[k]) return `<div class="avatar" style="background-image:url(${A}avatar_${k}.webp);background-size:128%;background-position:50% 28%"></div>`;
@@ -120,7 +160,7 @@ function badgesHTML(p) {
   const au = V.auction;
   if (!au || V.phase !== "auction") return "";
   let s = "";
-  if (au.auctioneer === p) s += `<span class="badge auct" title="Versteigerer">🔨</span>`;
+  if (au.auctioneer === p) s += `<span class="badge auct" title="Versteigerer">${GAVEL}</span>`;
   if (au.high === p) s += `<span class="badge crown" title="Höchstgebot">👑</span>`;
   else if (au.excluded.includes(p)) s += `<span class="badge out" title="Für diese Karte ausgeschlossen">🚫</span>`;
   return s;
@@ -221,7 +261,7 @@ function seatHTML(p, width, rows) {
     <div class="seat-head">
       ${moneyBox}
       <div class="avatar-wrap">${avatarHTML(p)}${badgesHTML(p)}</div>
-      <div class="nameplate"><b>${P.name}</b><span class="sub"><span class="pts">${scoreOf(P.animals)}</span> Pkt · ${P.quartets} Quartett${P.quartets === 1 ? "" : "e"}${revealed}</span></div>
+      <div class="nameplate"><b>${P.name}${V.auction && V.phase === "auction" && V.auction.auctioneer === p ? `<span class="role">${GAVEL} versteigert</span>` : ""}</b><span class="sub"><span class="pts">${scoreOf(P.animals)}</span> Pkt · ${P.quartets} Quartett${P.quartets === 1 ? "" : "e"}${revealed}</span></div>
       ${bubbleHTML(p)}
     </div>
     <div class="seat-cards">${animalsBox}</div>`;
@@ -248,6 +288,8 @@ function renderSeats() {
     seat.style.top = `${y}px`;
     seat.style.width = `${w}px`;
     seat.classList.toggle("active", V.to_act === p);
+    seat.classList.toggle("spot", !!(V.auction && V.phase === "auction" && V.auction.auctioneer === p));
+    seat.classList.toggle("rside", x > 1200);
     const html = seatHTML(p, w, rows);
     if (seat.dataset.html !== html) {
       seat.dataset.html = html;
@@ -303,7 +345,7 @@ function renderCenter() {
 
   const plaque = $("#plaque");
   if (V.phase === "auction" && au && holding) {
-    plaque.innerHTML = `<div class="lbl">Versteigerer</div><div class="who"><span class="pill auct">🔨 ${nameOf(au.auctioneer)}</span></div>
+    plaque.innerHTML = `<div class="lbl">Versteigerer</div><div class="who"><span class="pill auct">${GAVEL} ${nameOf(au.auctioneer)}</span></div>
       <hr><div class="who">Nächste Karte…</div>`;
   } else if (V.phase === "auction" && au) {
     const amount = au.high === null ? null : au.amount;
@@ -312,7 +354,7 @@ function renderCenter() {
     const hist = bidHistory.slice(-4).map((b) => `<b>${nameOf(b.p)}</b> ${b.amount}`).join(" → ");
     plaque.innerHTML = `
       <div class="lbl">Versteigerer</div>
-      <div class="who"><span class="pill auct">🔨 ${nameOf(au.auctioneer)}</span></div>
+      <div class="who"><span class="pill auct">${GAVEL} ${nameOf(au.auctioneer)}</span></div>
       <hr>
       <div class="lbl">Höchstgebot</div>
       <div class="amt${bump ? " bump" : ""}">${amount === null ? "–" : amount}</div>
@@ -328,7 +370,7 @@ function renderCenter() {
       <div>${t.k}× ${V.animals[t.animal].name} gegen ${t.k}× ${V.animals[t.animal].name}</div>
       ${!t.involved ? `<hr><div class="who" style="font-size:14px">${t.stage === "offer" ? `${nameOf(t.challenger)} legt ein verdecktes Gebot…` : `${nameOf(t.target)} überlegt…`}</div>` : ""}
       ${cnt !== undefined ? `<hr><div class="lbl">Verdecktes Gebot</div>
-        <div>${cnt} Karte${cnt === 1 ? "" : "n"} liegen auf dem Tisch${t.my_offer !== undefined ? ` · Wert <b>${t.my_offer}</b>` : ""}</div>` : ""}`;
+        <div>${cnt} Karte${cnt === 1 ? " liegt" : "n liegen"} auf dem Tisch${t.my_offer !== undefined ? ` · Wert <b>${t.my_offer}</b>` : ""}</div>` : ""}`;
   } else if (V.phase === "trade") {
     const cur = V.to_act;
     plaque.innerHTML = `
@@ -365,11 +407,11 @@ function renderTopButtons() {
 function renderMePlate() {
   const P = V.players[V.me];
   const plate = $("#me-plate");
-  plate.className = V.to_act === V.me ? "active" : "";
+  plate.className = (V.to_act === V.me ? "active" : "") + (V.auction && V.phase === "auction" && V.auction.auctioneer === V.me ? " spot" : "");
   plate.innerHTML = `
     <div class="avatar-wrap">${avatarHTML(V.me)}${badgesHTML(V.me)}</div>
     <div class="nameplate">
-      <b>${P.name}</b>
+      <b>${P.name}${V.auction && V.phase === "auction" && V.auction.auctioneer === V.me ? `<span class="role">${GAVEL} du versteigerst</span>` : ""}</b>
       <div class="chips">
         <span class="chip">💰 <b>${P.cash}</b></span>
         <span class="chip">⭐ <b>${scoreOf(P.animals)}</b> Pkt</span>
@@ -411,7 +453,7 @@ function renderOfferPile() {
   const list = [];
   selected.forEach((c, i) => { for (let k = 0; k < c; k++) list.push(i); });
   const sum = list.reduce((s, i) => s + V.denoms[i], 0);
-  box.innerHTML = `<span class="title">${selectMode === "offer" ? "Dein Gebot" : "Dein Gegengebot"}: ${list.length} Karten · Wert <b>${sum}</b></span>`;
+  box.innerHTML = `<span class="title">${selectMode === "offer" ? "Dein Gebot" : "Dein Gegengebot"}: ${list.length} Karte${list.length === 1 ? "" : "n"} · Wert <b>${sum}</b> <span style="opacity:.75">(Karte anklicken = zurücklegen)</span></span>`;
   if (!list.length) {
     box.innerHTML += `<div class="empty-hint">⬇ Klicke unten auf deine Geldstapel, um Karten hierher zu legen.</div>`;
     return;
@@ -540,7 +582,8 @@ function renderActions() {
   const au = V.auction;
   if (V.phase === "auction" && au.stage === "bidding") {
     const min = au.min_bid;
-    if (bidValue < min || bidValue > V.cap) bidValue = min;
+    const key = `${au.card}-${V.deck_left}-${au.excluded.length}-${min}`;
+    if (key !== bidKey || bidValue < min || bidValue > V.cap) { bidKey = key; bidValue = min; }
     const quick = [["+10", min], ["+50", min + 40], ["+100", min + 90], ["+200", min + 190]].filter(([, x]) => x <= V.cap);
     box.innerHTML = `
       <h4>Dein Gebot für ${V.animals[au.card].name}</h4>
@@ -559,7 +602,7 @@ function renderActions() {
       h.className = "hint" + (bidValue > P.cash ? " warn" : "");
       h.textContent = bidValue > P.cash
         ? `Bluff! Du hast nur ${P.cash}. Nimmt der Versteigerer das Geld, fliegst du auf.`
-        : `Mindestens ${min} · dein Limit ${V.cap} · Enter = bieten`;
+        : `Mindestens ${min} · Limit ${V.cap} (= 2 × Bargeld + 100) · Enter = bieten`;
     };
     upd();
     $("#bm").onclick = () => { bidValue = Math.max(min, bidValue - 10); upd(); };
@@ -777,7 +820,10 @@ function handleEvent(ev) {
       const s = ev.player === V.me ? $("#me-plate") : document.querySelector(`.seat[data-p="${ev.player}"]`);
       if (s) { s.classList.remove("shake"); void s.offsetWidth; s.classList.add("shake"); }
     }, 60);
-  } else if (ev.kind === "trade_result") banner("Kuhhandel!", ev.text);
+  } else if (ev.kind === "trade_result") {
+    const mine = ev.winner === V.me || ev.loser === V.me;
+    banner(mine ? (ev.winner === V.me ? "Gewonnen!" : "Verloren!") : "Kuhhandel!", ev.text, mine && ev.loser === V.me, mine ? 3.2 : 2.1);
+  }
   else if (ev.kind === "phase") banner("Phase 2", "Alle Karten sind versteigert – jetzt wird gehandelt!");
   else if (["sold", "bought", "free", "challenge", "offer"].includes(ev.kind)) toast(ev.text);
 }
@@ -787,9 +833,10 @@ function toast(text) {
   setTimeout(() => t.remove(), 4300);
   while ($("#toasts").children.length > 3) $("#toasts").firstChild.remove();
 }
-function banner(title, text, bad) {
+function banner(title, text, bad, secs = 2.1) {
   const b = $("#banner");
   b.className = bad ? "bad" : "";
+  b.style.animationDuration = `${secs}s`;
   b.innerHTML = `<div class="t">${title}</div><div class="d">${text}</div>`;
   void b.offsetWidth;
   b.classList.add("show");
@@ -892,7 +939,7 @@ function fit() {
 }
 fit();
 window.addEventListener("resize", fit);
-api("/api/state").then((v) => {
+api("/api/takeover", {}).then((v) => {
   if (v && v.phase !== "none" && v.phase !== "over") {
     $("#overlay").classList.remove("show");
     accept(v);
