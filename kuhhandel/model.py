@@ -90,3 +90,33 @@ class MixedBot:
 
     def act(self, g: Game):
         return (self.ai if self.rng.random() < self.p_ai else self.heur).act(g)
+
+
+def widen_state(state: dict, new_hidden: int, noise: float = 1e-3, seed: int = 0) -> dict:
+    """Macht ein Netz breiter, ohne sein Verhalten zu ändern (Net2WiderNet).
+
+    Jedes neue Neuron ist eine Kopie eines vorhandenen; dessen ausgehende Gewichte werden auf alle
+    Kopien aufgeteilt. Ein winziges Rauschen auf den eingehenden Gewichten sorgt dafür, dass sich
+    die Kopien beim Weitertrainieren unterschiedlich entwickeln können.
+    """
+    g = torch.Generator().manual_seed(seed)
+    state = {k: v.clone() for k, v in state.items()}
+    old = state["body.0.weight"].shape[0]
+    if new_hidden <= old:
+        return state
+    layers = ["body.0", "body.2", "body.4"]
+    prev_map = prev_count = None
+    for li, name in enumerate(layers):
+        W, b = state[f"{name}.weight"], state[f"{name}.bias"]
+        if prev_map is not None:                       # Eingänge: Spalten der Vorgänger-Kopien aufteilen
+            W = W[:, prev_map] / prev_count[prev_map]
+        mapping = torch.cat([torch.arange(old), torch.randint(0, old, (new_hidden - old,), generator=g)])
+        count = torch.bincount(mapping, minlength=old).float()
+        W, b = W[mapping].clone(), b[mapping].clone()
+        dup = torch.arange(new_hidden) >= old
+        W[dup] += noise * W[dup].std() * torch.randn(W[dup].shape, generator=g)
+        state[f"{name}.weight"], state[f"{name}.bias"] = W, b
+        prev_map, prev_count = mapping, count
+    for head in ("pi", "v"):                            # Köpfe: Eingänge der letzten Schicht aufteilen
+        state[f"{head}.weight"] = state[f"{head}.weight"][:, prev_map] / prev_count[prev_map]
+    return state

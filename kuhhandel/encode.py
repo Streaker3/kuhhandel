@@ -204,6 +204,8 @@ def observe(g: Game, me: int | None = None) -> np.ndarray:
         pub[-2] = 1.0 if t["stage"] == "offer" else 0.0
         pub[-1] = 1.0 if t["stage"] == "respond" else 0.0
     f += pub
+    # Anzahl der Karten im verdeckten Stapel sieht jeder am Tisch (Wert nicht)
+    f.append((sum(t["offer"]) / 10.0) if t is not None and t["offer"] is not None else 0.0)
     return np.asarray(f, dtype=np.float32)
 
 

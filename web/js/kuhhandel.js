@@ -587,6 +587,8 @@
       pub[pub.length - 1] = t.stage === "respond" ? 1 : 0;
     }
     f.push(...pub);
+    // Anzahl der Karten im verdeckten Stapel sieht jeder am Tisch (Wert nicht)
+    f.push(t !== null && t.offer !== null ? sum(t.offer) / 10 : 0);
     return Float32Array.from(f);
   }
 

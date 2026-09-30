@@ -25,7 +25,7 @@ import torch.nn.functional as F
 from kuhhandel.bots import HeuristicBot
 from kuhhandel.encode import decode_action, legal_mask, obs_size, observe
 from kuhhandel.engine import Game
-from kuhhandel.model import PolicyNet, adapt_state
+from kuhhandel.model import PolicyNet, adapt_state, widen_state
 
 ROOT = Path(__file__).parent
 CKPT = ROOT / "checkpoints"
@@ -36,20 +36,23 @@ PLAYER_WEIGHTS = (0.3, 0.4, 0.3)
 
 
 # ====================================================================== Rollouts
-def _new_net(state, hidden):
-    net = PolicyNet(hidden=hidden)
-    net.load_state_dict(adapt_state(state))
+def _new_net(state, hidden=None):
+    state = adapt_state(state)
+    net = PolicyNet(hidden=state["body.0.weight"].shape[0])   # Breite aus den Gewichten (Champion kann kleiner sein)
+    net.load_state_dict(state)
     net.eval()
     return net
 
 
-def _assign_seats(rng, n, n_league, p_league, p_heur):
+def _assign_seats(rng, n, n_league, p_league, p_heur, n_champ=0, p_champ=0.0):
     seats = []
     for _ in range(n):
         r = rng.random()
         if r < p_heur:
             seats.append("heur")
-        elif r < p_heur + p_league and n_league:
+        elif r < p_heur + p_champ and n_champ:
+            seats.append(("champ", rng.randrange(n_champ)))
+        elif r < p_heur + p_champ + p_league and n_league:
             seats.append(("league", rng.randrange(n_league)))
         else:
             seats.append("cur")
@@ -60,12 +63,14 @@ def _assign_seats(rng, n, n_league, p_league, p_heur):
 
 def rollout_worker(args):
     """Spielt `games` Partien gebündelt; liefert Trainingsdaten der 'cur'-Sitze."""
-    (state, league_states, hidden, games, seed, gamma, lam, mode, p_league, p_heur, bust_penalty) = args
+    (state, league_states, hidden, games, seed, gamma, lam, mode, p_league, p_heur, bust_penalty,
+     champ_states, p_champ) = args
     torch.set_num_threads(1)
     rng = random.Random(seed)
     torch.manual_seed(seed)
     cur = _new_net(state, hidden)
     league = [_new_net(s, hidden) for s in league_states]
+    champs = [_new_net(s) for s in champ_states]
     heur = HeuristicBot(seed=seed)
 
     def new_game():
@@ -76,7 +81,7 @@ def rollout_worker(args):
             seats[rng.randrange(n)] = "cur"
         else:
             n = rng.choices(PLAYER_COUNTS, PLAYER_WEIGHTS)[0]
-            seats = _assign_seats(rng, n, len(league), p_league, p_heur)
+            seats = _assign_seats(rng, n, len(league), p_league, p_heur, len(champs), p_champ)
         g = Game(n, seed=rng.randrange(1 << 30))
         return {"g": g, "seats": seats, "traj": defaultdict(list), "ev": 0}
 
@@ -142,7 +147,7 @@ def rollout_worker(args):
                         g.step(heur.act(g))
                         after_step(active[i])
                     continue
-                net = cur if key == "cur" else league[key[1]]
+                net = cur if key == "cur" else (champs if key[0] == "champ" else league)[key[1]]
                 obs = np.stack([observe(active[i]["g"]) for i in idxs])
                 mask = np.stack([legal_mask(active[i]["g"]) for i in idxs])
                 logits, v = net(torch.from_numpy(obs), torch.from_numpy(mask))
@@ -228,7 +233,7 @@ def evaluate(pool, net, args, games, opponent=None):
     per = max(1, games // args.workers)
     league = [opponent] if opponent is not None else []
     mode = "evalvs" if opponent is not None else "eval"
-    jobs = [(state, league, args.hidden, per, random.randrange(1 << 30), 1.0, 0.95, mode, 0, 0, 0.0)
+    jobs = [(state, league, args.hidden, per, random.randrange(1 << 30), 1.0, 0.95, mode, 0, 0, 0.0, [], 0.0)
             for _ in range(args.workers)]
     wins = seats = busts = 0
     by_n = defaultdict(lambda: [0, 0])
@@ -259,10 +264,18 @@ def main():
     ap.add_argument("--eval-every", type=int, default=10)
     ap.add_argument("--eval-games", type=int, default=700)
     ap.add_argument("--resume", action="store_true")
+    ap.add_argument("--init-from", default=None, help="Start aus diesem Checkpoint (wird auf --hidden verbreitert)")
+    ap.add_argument("--champion", action="append", default=[],
+                    help="feste starke Gegner (Checkpoint-Pfad, mehrfach möglich); gegen den ersten wird gemessen")
+    ap.add_argument("--p-champ", type=float, default=0.25, help="Anteil der Sitze mit einem Champion")
+    ap.add_argument("--ckpt-dir", default="checkpoints")
+    ap.add_argument("--log", default="runs/log.csv")
     ap.add_argument("--bust-penalty", type=float, default=0.05,
                     help="Malus pro Auffliegen (Siegbelohnung = 1); Spielregeln bleiben unverändert")
     args = ap.parse_args()
 
+    global CKPT
+    CKPT = ROOT / args.ckpt_dir
     CKPT.mkdir(exist_ok=True)
     RUNS.mkdir(exist_ok=True)
     torch.set_num_threads(max(1, (mp.cpu_count() or 4) // 2))
@@ -282,10 +295,17 @@ def main():
         elapsed0, games0 = ck.get("elapsed_min", 0.0), ck.get("games_total", 0)
         best = ck.get("best", -1.0)
         print(f"Fortsetzen ab Iteration {start_it}, Liga: {len(league)} Versionen")
+    elif args.init_from:
+        init = adapt_state(torch.load(ROOT / args.init_from, weights_only=False)["model"])
+        net.load_state_dict(widen_state(init, args.hidden))
+        print(f"Start aus {args.init_from}, verbreitert auf {args.hidden} Neuronen pro Schicht")
+    champ_states = [adapt_state(torch.load(ROOT / c, weights_only=False)["model"]) for c in args.champion]
+    if champ_states:
+        print(f"Champions als Gegner: {', '.join(args.champion)} (Anteil {args.p_champ:.0%} der Sitze)")
 
     header = ["iter", "time_min", "games_total", "steps", "selfplay_winrate", "eval_winrate", "eval_by_n",
-              "vs_old_winrate", "vs_old_iter", "vs_old_by_n", "busts_per_game", "eval_busts", "bust_penalty", "pg", "vl", "ent", "kl", "clipfrac", "sps"]
-    log_path = RUNS / "log.csv"
+              "vs_old_winrate", "vs_old_iter", "vs_old_by_n", "vs_champ_winrate", "vs_champ_by_n", "busts_per_game", "eval_busts", "bust_penalty", "pg", "vl", "ent", "kl", "clipfrac", "sps"]
+    log_path = ROOT / args.log
     old_rows = []
     if args.resume and log_path.exists():
         with open(log_path, newline="") as f:
@@ -318,7 +338,8 @@ def main():
             state = {k: v.clone() for k, v in net.state_dict().items()}
             per = max(1, args.games // args.workers)
             jobs = [(state, league, args.hidden, per, random.randrange(1 << 30), args.gamma, args.lam,
-                     "train", p_league, p_heur, args.bust_penalty) for _ in range(args.workers)]
+                     "train", p_league, p_heur, args.bust_penalty, champ_states, args.p_champ)
+                    for _ in range(args.workers)]
             results = pool.map(rollout_worker, jobs)
             data = [r for r, _ in results if r is not None]
             batch = {k: np.concatenate([d[k] for d in data]) for k in data[0]}
@@ -347,13 +368,20 @@ def main():
                     row["vs_old_winrate"] = f"{wr_o:.3f}"
                     row["vs_old_iter"] = old[-1]
                     row["vs_old_by_n"] = " ".join(f"{n}:{v:.2f}" for n, v in by_o.items())
-                if wr > best:
-                    best = wr
+                # gegen den Champion: echter Fortschritt, auch wenn die einfachen Bots nicht mehr fordern
+                score = wr
+                if champ_states:
+                    wr_c, by_c, _ = evaluate(pool, net, args, args.eval_games, opponent=champ_states[0])
+                    row["vs_champ_winrate"] = f"{wr_c:.3f}"
+                    row["vs_champ_by_n"] = " ".join(f"{n}:{v:.2f}" for n, v in by_c.items())
+                    score = wr_c
+                if score > best:
+                    best = score
                     save(net, opt, it, league, CKPT / "best.pt", {"best": best})
             if it % args.snapshot_every == 0:
                 league.append({k: v.clone() for k, v in net.state_dict().items()})
                 league = league[-args.league_size:]
-                torch.save({"model": net.state_dict(), "obs_dim": obs_size(), "hidden": args.hidden, "iter": it},
+                torch.save({"model": net.state_dict(), "obs_dim": obs_size(), "hidden": net.v.in_features, "iter": it},
                            CKPT / f"snap_{it:05d}.pt")
                 snap_iters.append(it)
             mins = elapsed0 + (time.time() - t0) / 60
@@ -374,6 +402,8 @@ def main():
                    f"ent {info['ent']:.2f} vl {info['vl']:.3f} kl {info['kl']:.4f}")
             if eval_wr:
                 msg += f" | vs Heuristik: {eval_wr} ({eval_by_n})"
+            if row.get("vs_champ_winrate"):
+                msg += f" | vs Champion: {row['vs_champ_winrate']}"
             print(msg, flush=True)
     finally:
         pool.close()
