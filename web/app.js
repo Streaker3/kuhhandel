@@ -126,6 +126,13 @@ async function act(action) {
 const nameOf = (p) => (p === V.me ? "Du" : V.players[p].name);
 const animalKey = (a) => V.animals[a].key;
 
+// Alle Kartenbilder vorladen, damit neue Karten (z. B. nach dem Überspringen) sofort ein Bild haben
+const PRELOAD = [];
+["pferd", "kuh", "schwein", "esel", "ziege", "schaf", "hund", "katze", "gans", "hahn"].forEach((k) => PRELOAD.push(`${A}tier_${k}.webp`));
+[0, 10, 50, 100, 200, 500].forEach((d) => PRELOAD.push(`${A}geld_${d}.webp`));
+PRELOAD.push(`${A}rueckseite.webp`, `${A}rueckseite_geld.webp`);
+const PRELOADED = PRELOAD.map((src) => { const i = new Image(); i.src = src; return i; });
+
 // Eigene Profilbilder (assets/web/avatar_<key>.webp), sonst Ausschnitt einer Tierkarte
 const AVATAR_KEY = ["du", "berta", "konrad", "hilde", "gustav"];
 const avatarOk = {};
@@ -216,6 +223,7 @@ function render() {
   renderOfferPile();
   renderHand();
   renderActions();
+  $("#me-plate").style.bottom = `${58 + $("#actions").offsetHeight - 8}px`;
   if (Date.now() < panelErrUntil) $("#actions").insertAdjacentHTML("afterbegin", `<div class="perr">⚠️ ${panelErr}</div>`);
   renderTopButtons();
   if (V.phase === "over") showResults();
@@ -428,7 +436,7 @@ function renderWallet() {
   w.innerHTML = "";
   const notes = V.players[V.me].notes;
   const idx = V.denoms.map((_, i) => i).filter((i) => notes[i] > 0);
-  const { xs } = packPositions(idx.map(() => OWN.w), V.phase === "trade" ? 520 : 460, 12);
+  const { xs } = packPositions(idx.map(() => OWN.w), V.phase === "trade" ? 470 : 460, 12);
   idx.forEach((i, k) => {
     const avail = notes[i] - selected[i];
     const d = V.denoms[i];
@@ -476,7 +484,7 @@ function renderHand() {
   const P = V.players[V.me];
   const p2 = V.phase === "trade";
   const CW = p2 ? 124 : OWN.w, CH = p2 ? 186 : OWN.h;
-  const DX = 16, DY = 8, W = p2 ? 880 : 480;
+  const DX = 16, DY = 8, W = p2 ? 500 : 480;
   const groups = [];
   shownAnimals(V.me).forEach((c, a) => { if (c) groups.push([a, c]); });
   hand.style.width = `${W}px`;
@@ -615,7 +623,7 @@ function renderActions() {
     const context = au.high === null ? "Noch kein Gebot"
       : `Höchstgebot <b class="num">${au.amount}</b> · 👑 ${nameOf(au.high)}`;
     const redo = au.excluded.length ? `<div class="ctx redo">🔁 Wiederholung – ${au.excluded.map(nameOf).join(", ")} ausgeschlossen</div>` : "";
-    const quick = [["Minimum", min], ["+50", min + 40], ["+100", min + 90], ["Limit", V.cap]]
+    const quick = [["Min", min], ["+50", min + 40], ["+100", min + 90], ["Limit", V.cap]]
       .filter(([, x], i, arr) => arr.findIndex(([, y]) => y === x) === i);
     box.innerHTML = `
       <h4>Dein Gebot für ${V.animals[au.card].name} <span class="ctx">· ${context}</span></h4>${redo}
@@ -623,10 +631,10 @@ function renderActions() {
         <button class="btn small" id="bm">−10</button>
         <input class="bid-input" id="bv" type="text" inputmode="numeric" value="${bidValue}" autocomplete="off">
         <button class="btn small" id="bp">+10</button>
-        <button class="btn primary" id="bgo">Bieten</button>
-        <button class="btn danger" id="bpass">Passen</button>
+        <button class="btn primary" id="bgo" title="Enter">Bieten</button>
+        <button class="btn danger" id="bpass" title="Esc">Passen</button>
       </div>
-      <div class="btns quick">${quick.map(([l, q]) => `<button class="btn small" data-q="${q}" ${q > V.cap ? "disabled" : ""}>${l} <small>${q}</small></button>`).join("")}</div>
+      <div class="btns quick">${quick.map(([l, q]) => `<button class="btn small" data-q="${q}" ${q > V.cap ? "disabled" : ""}>${l} <b class="num">${q}</b></button>`).join("")}</div>
       <div class="hint" id="bhint"></div>`;
     const input = $("#bv");
     const valid = () => Number.isInteger(bidValue) && bidValue % 10 === 0 && bidValue >= min && bidValue <= V.cap;
@@ -634,7 +642,7 @@ function renderActions() {
       if (!fromInput) input.value = bidValue;
       const h = $("#bhint");
       const go = $("#bgo");
-      let msg = `Min. ${min} · Limit ${V.cap} (2× Bargeld + 100) · Enter bietet, Esc passt`;
+      let msg = "";
       let cls = "hint";
       if (!valid()) {
         cls += " warn";
@@ -645,6 +653,7 @@ function renderActions() {
       }
       h.className = cls;
       h.textContent = msg;
+      h.style.display = msg ? "" : "none";
       go.disabled = !valid();
       go.textContent = valid() && bidValue > P.cash ? `Bluffen (${bidValue})` : "Bieten";
       go.classList.toggle("bluff", valid() && bidValue > P.cash);
@@ -676,7 +685,7 @@ function renderActions() {
         <button class="btn primary" id="take">💰 ${au.amount} nehmen <small>G</small></button>
         <button class="btn go" id="buy" ${canBuy ? "" : "disabled"}>✋ Selbst kaufen (${au.amount}) <small>K</small></button>
       </div>
-      <div class="hint">${canBuy ? "Geld nehmen: Du bekommst das Geld, der Bieter die Karte. Selbst kaufen: Du zahlst den Betrag und behältst die Karte." : "Für das Vorkaufsrecht reicht dein Bargeld nicht."}</div>`;
+      ${canBuy ? "" : `<div class="hint">Für „Selbst kaufen“ reicht dein Bargeld nicht.</div>`}`;
     $("#take").onclick = () => act({ kind: "take" });
     if (canBuy) $("#buy").onclick = () => act({ kind: "buy" });
     keyHandler = (e) => {
@@ -687,8 +696,7 @@ function renderActions() {
   }
   if (V.phase === "trade" && !V.trade) {
     box.innerHTML = `<h4>Du bist dran: Wen forderst du heraus?</h4>
-      <div>Fahre über eine deiner leuchtenden Karten – dahinter erscheinen die Gegner, die dieses Tier auch haben. Klicke einen an.</div>
-      <div class="hint">Alternativ: Karte mit ⚔️ direkt bei einem Gegner anklicken.</div>`;
+      <div class="hint">Über eine deiner Karten fahren oder eine ⚔-Karte beim Gegner anklicken.</div>`;
     return;
   }
   const t = V.trade;
@@ -700,14 +708,14 @@ function renderActions() {
       <div>${cardsLabel(notesCount(selected))} · Wert <span class="num" style="font-size:20px">${notesSum(selected)}</span></div>
       <div class="btns" style="margin-top:10px"><button class="btn primary" id="go">${zeroGo()}</button></div>
       ${overWarn(selected)}
-      <div class="hint">${nameOf(t.target)} sieht nur die Anzahl der Karten – 0er-Karten eignen sich zum Bluffen. Die Herausforderung ist verbindlich.</div>`;
+      <div class="hint">${nameOf(t.target)} sieht nur die Anzahl deiner Karten.</div>`;
     $("#go").onclick = () => zeroSubmit("offer");
     return;
   }
   if (selectMode !== "counter") {
     box.innerHTML = `<h4>${nameOf(t.challenger)} will ${t.k}× ${V.animals[t.animal].name} und bietet ${t.offer_count} verdeckte Karte${t.offer_count === 1 ? "" : "n"}</h4>
       <div class="btns"><button class="btn primary" id="acc">Annehmen</button><button class="btn go" id="ctr">Gegengebot</button></div>
-      <div class="hint">Annehmen: Du bekommst den Stapel, ${nameOf(t.challenger)} die Karte(n). Gegengebot: Der Höhere gewinnt und zahlt die Differenz; bei Gleichstand gewinnt ${nameOf(t.challenger)}.</div>`;
+      <div class="hint" title="Annehmen: Du bekommst den Stapel, ${nameOf(t.challenger)} die Karte(n). Gegengebot: Der Höhere gewinnt und zahlt die Differenz; bei Gleichstand gewinnt ${nameOf(t.challenger)}.">Gegengebot: Höheres Gebot gewinnt, zahlt nur die Differenz.</div>`;
     $("#acc").onclick = () => act({ kind: "accept" });
     $("#ctr").onclick = () => { selectMode = "counter"; selected = [0, 0, 0, 0, 0, 0]; render(); };
     return;

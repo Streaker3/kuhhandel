@@ -325,7 +325,7 @@ button { font-family: inherit; cursor: pointer; }
 .full > .cnt { background: #3aa655 !important; color: #fff !important; border-color: var(--paper) !important; }
 
 /* ================================================================ Phase 2 (Kuhhandel) */
-#stage.p2 #center { top: 274px; gap: 150px; }
+#stage.p2 #center { top: 300px; gap: 150px; }
 #stage.p2 #pile-area { --mid-w: 104px; --mid-h: 156px; }
 #stage.p2 #hand { width: 880px; }
 #stage.p2 #me-plate { left: 86px; bottom: 236px; transform: none; }
@@ -438,5 +438,22 @@ button { font-family: inherit; cursor: pointer; }
 #offer-pile .title { max-width: 380px; white-space: normal; }
 
 /* ---- Markierte Gegnerkarten ganz klickbar (liegen über den Nachbarn) ---- */
-.ogroup.pick { z-index: 100 !important; }
+
 #plaque .history { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* ================================================================ Unten: Aktionsfeld ganz unten, Spielerschild darüber */
+#actions { top: auto !important; bottom: 58px !important; width: 440px; padding: 10px 14px 12px; z-index: 6; }
+#actions h4 { font-size: 18px; margin-bottom: 8px; }
+#actions .hint { margin-top: 6px; }
+#me-plate { left: 800px !important; transform: translateX(-50%) !important; z-index: 7; transition: bottom .15s; }
+#me-plate .bubble { left: calc(100% + 12px); }
+.btns.quick { flex-wrap: nowrap; gap: 6px; }
+.btns.quick .btn { min-width: 0; padding: 4px 10px; font-size: 14px; white-space: nowrap; }
+.btns.quick .btn b { font-size: 15px; margin-left: 3px; }
+.bid-input { width: 100px; font-size: 26px; }
+#stage.p2 #hand { width: 500px; }
+#stage.p2 #wallet { width: 470px; }
+#stage.p2 #offer-pile { bottom: 262px; }
+/* Markierte Gegnerkarten: nur beim Überfahren nach vorn, sonst normale Reihenfolge */
+.ogroup.pick { z-index: auto; }
+.ogroup.pick:hover { z-index: 100 !important; }
