@@ -52,7 +52,7 @@ button { font-family: inherit; cursor: pointer; }
   box-shadow: 0 2px 5px rgba(0,0,0,.5); white-space: nowrap; pointer-events: none;
 }
 .full > .cnt { background: var(--gold); color: var(--wood); border-color: var(--wood); }
-.fly { position: fixed; z-index: 500; pointer-events: none; transition: transform .6s cubic-bezier(.2,.8,.2,1), opacity .6s; }
+.fly { position: fixed; z-index: 500; pointer-events: none; transform-origin: 50% 50%; transition: transform .62s cubic-bezier(.3,.7,.2,1), opacity .15s; }
 
 /* ================================================================ Gegner */
 #seats { position: absolute; inset: 0; }

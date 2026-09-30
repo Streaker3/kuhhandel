@@ -404,9 +404,10 @@ class Game:
         t["offer"] = notes
         t["stage"] = "respond"
         cnt = sum(notes)
+        word = "Schein" if cnt == 1 else "Scheine"
         self._log(None, {
-            p: f"Du legst verdeckt {cnt} Scheine ({notes_value(notes)}).",
-            t["target"]: f"{self.names[p]} legt verdeckt {cnt} Scheine hin.",
+            p: f"Du legst verdeckt {cnt} {word} ({notes_value(notes)}).",
+            t["target"]: f"{self.names[p]} legt verdeckt {cnt} {word} hin.",
         }, kind="offer", count=cnt)
 
     def _give_cards(self, winner, loser):

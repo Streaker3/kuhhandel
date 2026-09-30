@@ -97,6 +97,13 @@ function avatarHTML(p) {
   if (avatarOk[k]) return `<div class="avatar" style="background-image:url(${A}avatar_${k}.webp);background-size:cover;background-position:center"></div>`;
   return `<div class="avatar" style="background-image:url(${tierImg(AVATAR_ANIMAL[p % AVATAR_ANIMAL.length])})"></div>`;
 }
+/** Sichtbarer Tierbestand: Karten, die gerade im Kuhhandel in der Mitte liegen, fehlen im Inventar. */
+function shownAnimals(p) {
+  const a = [...V.players[p].animals];
+  const t = V.trade;
+  if (t && (p === t.challenger || p === t.target)) a[t.animal] -= t.k;
+  return a;
+}
 function scoreOf(animals) {
   const full = animals.map((c, a) => (c === 4 ? V.animals[a].value : 0)).filter(Boolean);
   return full.reduce((x, y) => x + y, 0) * full.length;
@@ -177,7 +184,7 @@ function seatHTML(p, width, rows) {
   // Tiere: pro Art ein Stapel, bei seitlichen Gegnern auf zwei Reihen verteilt
   const pickable = new Set((V.options || []).filter((o) => o.target === p).map((o) => o.animal));
   const groups = [];
-  P.animals.forEach((c, a) => { if (c) groups.push([a, c]); });
+  shownAnimals(p).forEach((c, a) => { if (c) groups.push([a, c]); });
   const DX = 10;
   const perRow = Math.max(1, Math.ceil(groups.length / rows));
   let animals = "";
@@ -415,7 +422,7 @@ function renderHand() {
   const CW = p2 ? 124 : OWN.w, CH = p2 ? 186 : OWN.h;
   const DX = 16, DY = 8, W = p2 ? 880 : 480;
   const groups = [];
-  P.animals.forEach((c, a) => { if (c) groups.push([a, c]); });
+  shownAnimals(V.me).forEach((c, a) => { if (c) groups.push([a, c]); });
   hand.style.width = `${W}px`;
   if (!groups.length) { hand.innerHTML = `<div class="hand-empty">Noch keine Tierkarten</div>`; return; }
   const options = V.options || [];
@@ -596,86 +603,137 @@ function renderActions() {
 }
 
 // --------------------------------------------------------------- Kartenflüge
-function areaRect(p, animal) {
-  if (p === V.me) {
-    const g = animal !== undefined && document.querySelector(`#hand .hgroup[data-a="${animal}"]`);
-    return (g || $("#hand")).getBoundingClientRect();
-  }
+// Eine Karte wandert als "Stellvertreter": Er startet exakt auf der Karte im Inventar (die im selben
+// Moment verschwindet), ändert nur während des Flugs seine Größe und übergibt am Ziel an die dort schon
+// liegende, bis zur Landung unsichtbare Karte.
+const FLY_MS = 620;
+const stageScale = () => $("#stage").getBoundingClientRect().width / 1600;
+
+/** Mittelpunkt, echte (unverdrehte) Größe und Drehung eines Karten-Elements in Bildschirmkoordinaten. */
+function cardGeom(elm) {
+  const r = elm.getBoundingClientRect();
+  const s = stageScale();
+  const m = /rotate\((-?[\d.]+)deg\)/.exec(elm.style.transform || "");
+  return { cx: r.left + r.width / 2, cy: r.top + r.height / 2, w: elm.offsetWidth * s, h: elm.offsetHeight * s, rot: m ? +m[1] : 0 };
+}
+function rectGeom(r, w, h) {
+  return { cx: r.left + r.width / 2, cy: r.top + r.height / 2, w: w ?? r.width, h: h ?? r.height, rot: 0 };
+}
+function groupEl(p, animal) {
+  if (p === V.me) return document.querySelector(`#hand .hgroup[data-a="${animal}"]`);
   const seat = document.querySelector(`.seat[data-p="${p}"]`);
-  if (!seat) return null;
-  const g = animal !== undefined && seat.querySelector(`.ogroup[data-a="${animal}"]`);
-  return (g || seat.querySelector(".opp-animals, .no-animals") || seat).getBoundingClientRect();
+  return seat && seat.querySelector(`.ogroup[data-a="${animal}"]`);
+}
+/** Die obersten k Karten einer Tiergruppe (als Startpunkte), sonst der Auslagebereich. */
+function topCardGeoms(p, animal, k) {
+  const g = groupEl(p, animal);
+  const cards = g ? [...g.querySelectorAll(".card")] : [];
+  const out = [];
+  for (let i = 0; i < k; i++) {
+    const c = cards[cards.length - 1 - i];
+    if (c) out.push(cardGeom(c));
+    else {
+      const area = p === V.me ? $("#hand") : document.querySelector(`.seat[data-p="${p}"]`);
+      if (area) out.push(rectGeom(area.getBoundingClientRect()));
+    }
+  }
+  return out;
 }
 function moneyRect(p) {
   if (p === V.me) return $("#wallet").getBoundingClientRect();
   const seat = document.querySelector(`.seat[data-p="${p}"]`);
-  return seat ? (seat.querySelector(".opp-money, .seat-head") || seat).getBoundingClientRect() : null;
+  return seat ? (seat.querySelector(".mini-money, .seat-head") || seat).getBoundingClientRect() : null;
 }
 
 /** Vor dem Neuzeichnen: Startpunkte der Flüge merken. */
 function planFlights(prev, events) {
   const out = [];
-  const revFace = document.querySelector("#revealed .face.f");
+  const revFlip = document.querySelector("#revealed .flip");
   for (const ev of events) {
-    if (["sold", "bought", "free"].includes(ev.kind) && revFace) {
-      out.push({ img: tierImg(prev.animals[ev.card].key), from: revFace.getBoundingClientRect(), to: { p: ev.player, animal: ev.card } });
+    if (["sold", "bought", "free"].includes(ev.kind) && revFlip) {
+      out.push({ img: tierImg(prev.animals[ev.card].key), from: cardGeom(revFlip), to: { p: ev.player, animal: ev.card } });
       const au = prev.auction;
       if (au && ev.kind !== "free") {
         const payer = ev.kind === "sold" ? ev.player : au.auctioneer;
         const payee = ev.kind === "sold" ? au.auctioneer : au.high;
         const from = moneyRect(payer);
-        for (let i = 0; i < 3 && from; i++) out.push({ money: true, from, to: { p: payee, money: true }, delay: 120 + i * 90 });
+        for (let i = 0; i < 3 && from; i++) out.push({ money: true, from: rectGeom(from), to: { p: payee, money: true }, delay: 120 + i * 90 });
       }
     }
     if (ev.kind === "challenge" && ev.animal !== undefined) {
       for (const who of [ev.challenger, ev.target]) {
-        const from = areaRect(who, ev.animal);
-        for (let i = 0; i < ev.k && from; i++) {
-          out.push({ img: tierImg(prev.animals[ev.animal].key), from, to: { center: true, idx: (who === ev.target ? ev.k : 0) + i }, delay: i * 120 + (who === ev.target ? 250 : 0) });
-        }
+        topCardGeoms(who, ev.animal, ev.k).forEach((from, i) => {
+          out.push({ img: tierImg(prev.animals[ev.animal].key), from,
+            to: { center: true, idx: (who === ev.target ? ev.k : 0) + i }, delay: i * 120 + (who === ev.target ? 250 : 0) });
+        });
       }
     }
     if (ev.kind === "offer" && prev.trade) {
       const from = moneyRect(prev.trade.challenger);
       for (let i = 0; i < Math.min(ev.count || 0, 8) && from; i++) {
-        out.push({ money: true, from, to: { stack: true }, delay: i * 80 });
+        out.push({ money: true, from: rectGeom(from), to: { stack: true }, delay: i * 80 });
       }
     }
     if (ev.kind === "trade_result") {
-      const centerCards = [...document.querySelectorAll("#revealed .tcard")];
-      if (centerCards.length) {
-        centerCards.forEach((c, i) => out.push({ img: tierImg(prev.animals[ev.animal].key), from: c.getBoundingClientRect(),
-          to: { p: ev.winner, animal: ev.animal }, delay: 250 + i * 120 }));
-      } else {
-        const from = areaRect(ev.loser, ev.animal);
-        for (let i = 0; i < ev.k && from; i++) {
-          out.push({ img: tierImg(prev.animals[ev.animal].key), from, to: { p: ev.winner, animal: ev.animal }, delay: i * 140 });
-        }
-      }
+      const center = [...document.querySelectorAll("#revealed .tcard")];
+      const froms = center.length ? center.map(cardGeom) : topCardGeoms(ev.loser, ev.animal, ev.k);
+      froms.forEach((from, i) => out.push({ img: tierImg(prev.animals[ev.animal].key), from,
+        to: { p: ev.winner, animal: ev.animal }, delay: 250 + i * 120 }));
     }
   }
   return out;
 }
 
+/** Nach dem Neuzeichnen: Zielkarten verstecken und die Stellvertreter fliegen lassen. */
 function runFlights(flights) {
+  const taken = new Map(); // Gruppe -> bereits vergebene Zielkarten
+  const pendingBadges = new Map();
   for (const f of flights) {
-    const to = f.to.center ? (document.querySelectorAll("#revealed .tcard")[f.to.idx] || $("#revealed")).getBoundingClientRect()
-      : f.to.stack ? $("#tstack").getBoundingClientRect()
-      : f.to.money ? moneyRect(f.to.p) : areaRect(f.to.p, f.to.animal);
+    let dest = null, to = null;
+    if (f.to.center) {
+      dest = document.querySelectorAll("#revealed .tcard")[f.to.idx] || null;
+    } else if (f.to.stack) {
+      to = rectGeom($("#tstack").getBoundingClientRect(), 64 * stageScale(), 96 * stageScale());
+    } else if (f.to.money) {
+      const r = moneyRect(f.to.p);
+      if (r) to = rectGeom(r, 40 * stageScale(), 60 * stageScale());
+    } else {
+      const g = groupEl(f.to.p, f.to.animal);
+      if (g) {
+        const cards = [...g.querySelectorAll(".card")];
+        const n = taken.get(g) || 0;
+        taken.set(g, n + 1);
+        dest = cards[cards.length - 1 - n] || null;
+        const badge = g.querySelector(".cnt");
+        if (badge) { badge.style.visibility = "hidden"; pendingBadges.set(badge, (pendingBadges.get(badge) || 0) + 1); }
+        f.badge = badge;
+      } else {
+        const area = f.to.p === V.me ? $("#hand") : document.querySelector(`.seat[data-p="${f.to.p}"] .seat-cards`);
+        if (area) to = rectGeom(area.getBoundingClientRect(), f.from.w * 0.7, f.from.h * 0.7);
+      }
+    }
+    if (dest) { to = cardGeom(dest); dest.style.visibility = "hidden"; }
     if (!to) continue;
-    const s = $("#stage").getBoundingClientRect().width / 1600; // Bühnenskalierung
-    const w = f.money ? 64 * s : f.from.width, h = f.money ? 96 * s : f.from.height;
-    const x0 = f.from.left + f.from.width / 2 - w / 2, y0 = f.from.top + f.from.height / 2 - h / 2;
+
+    const { cx, cy, w, h, rot } = f.money ? { ...f.from, w: 40 * stageScale(), h: 60 * stageScale(), rot: 0 } : f.from;
     const c = el("div", "card fly" + (f.money ? " mback" : ""));
-    Object.assign(c.style, { left: `${x0}px`, top: `${y0}px`, width: `${w}px`, height: `${h}px` });
+    Object.assign(c.style, { left: `${cx - w / 2}px`, top: `${cy - h / 2}px`, width: `${w}px`, height: `${h}px`, transform: `rotate(${rot}deg)` });
     if (f.img) c.style.backgroundImage = `url(${f.img})`;
     document.body.appendChild(c);
-    const dx = to.left + to.width / 2 - (x0 + w / 2), dy = to.top + to.height / 2 - (y0 + h / 2);
-    const scale = f.money ? 0.8 : Math.min(1, (to.height || h) / h);
+    const land = () => {
+      if (dest) dest.style.visibility = "";
+      if (f.badge) {
+        const left = pendingBadges.get(f.badge) - 1;
+        pendingBadges.set(f.badge, left);
+        if (left <= 0) f.badge.style.visibility = "";
+      }
+      c.remove();
+    };
     setTimeout(() => {
-      c.style.transform = `translate(${dx}px, ${dy}px) scale(${scale}) rotate(${f.money ? 20 : 8}deg)`;
-      setTimeout(() => { c.style.opacity = "0"; }, 520);
-      setTimeout(() => c.remove(), 1150);
+      // Position UND Größe ändern sich nur während des Flugs
+      c.style.transform = `translate(${to.cx - cx}px, ${to.cy - cy}px) scale(${to.w / w}, ${to.h / h}) rotate(${to.rot}deg)`;
+      if (f.money) setTimeout(() => { c.style.opacity = "0"; }, FLY_MS - 150);
+      setTimeout(land, FLY_MS + 20);
     }, 30 + (f.delay || 0));
   }
 }
