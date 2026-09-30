@@ -52,7 +52,8 @@ async function api(path, body) {
   if (j.error === "other_tab") { showOtherTab(); return null; }
   if (j.error) {
     // Ansicht war veraltet (z. B. anderer Tab) -> neu synchronisieren statt hängen zu bleiben
-    toast("⚠️ " + j.error);
+    panelErr = j.error;
+    panelErrUntil = Date.now() + 4000;
     resync();
     return null;
   }
@@ -215,6 +216,7 @@ function render() {
   renderOfferPile();
   renderHand();
   renderActions();
+  if (Date.now() < panelErrUntil) $("#actions").insertAdjacentHTML("afterbegin", `<div class="perr">⚠️ ${panelErr}</div>`);
   renderTopButtons();
   if (V.phase === "over") showResults();
 }
@@ -351,7 +353,7 @@ function renderCenter() {
     const amount = au.high === null ? null : au.amount;
     const bump = amount !== null && amount !== lastAmount;
     lastAmount = amount;
-    const hist = bidHistory.slice(-4).map((b) => `<b>${nameOf(b.p)}</b> ${b.amount}`).join(" → ");
+    const hist = bidHistory.slice(-3).map((b) => `<b>${nameOf(b.p)}</b> ${b.amount}`).join(" → ");
     plaque.innerHTML = `
       <div class="lbl">Versteigerer</div>
       <div class="who"><span class="pill auct">${GAVEL} ${nameOf(au.auctioneer)}</span></div>
@@ -415,7 +417,7 @@ function renderMePlate() {
       <div class="chips">
         <span class="chip">💰 <b>${P.cash}</b></span>
         <span class="chip">⭐ <b>${scoreOf(P.animals)}</b> Pkt</span>
-        ${V.phase === "auction" ? `<span class="chip" title="Maximales Gebot = Bargeld × 2 + 100">Limit <b>${V.cap}</b></span>` : ""}
+        ${V.phase === "auction" && V.auction && V.auction.auctioneer !== V.me ? `<span class="chip" title="Maximales Gebot = Bargeld × 2 + 100">Limit <b>${V.cap}</b></span>` : ""}
       </div>
     </div>
     ${bubbleHTML(V.me)}`;
@@ -426,7 +428,7 @@ function renderWallet() {
   w.innerHTML = "";
   const notes = V.players[V.me].notes;
   const idx = V.denoms.map((_, i) => i).filter((i) => notes[i] > 0);
-  const { xs } = packPositions(idx.map(() => OWN.w), 460, 12);
+  const { xs } = packPositions(idx.map(() => OWN.w), V.phase === "trade" ? 520 : 460, 12);
   idx.forEach((i, k) => {
     const avail = notes[i] - selected[i];
     const d = V.denoms[i];
@@ -503,7 +505,12 @@ function renderHand() {
     g.appendChild(el("span", "cnt", full ? "✓ Quartett" : `${c}/4`));
     g.appendChild(el("span", "name", `${V.animals[a].name} · ${V.animals[a].value}`));
     if (p2) {
-      g.appendChild(popsFor(a, c, options));
+      const pops = popsFor(a, c, options);
+      const cx = 1600 - 70 - W + left + widths[gi] / 2;   // Mitte der Gruppe in Bühnenkoordinaten
+      const reach = 175;
+      const shift = Math.min(0, 1530 - (cx + reach)) + Math.max(0, 70 - (cx - reach));
+      pops.style.setProperty("--shift", `${shift}px`);
+      g.appendChild(pops);
     } else if (!full && c > 1) {
       // Phase 1: beim Hovern auffächern, ohne über den Tischrand zu ragen
       g.onmouseenter = () => {
@@ -554,10 +561,29 @@ function popsFor(a, c, options) {
   return box;
 }
 
+const cardsLabel = (n) => `${n} Karte${n === 1 ? "" : "n"}`;
+function zeroGo(label = "Verdeckt hinlegen") {
+  if (notesCount(selected) > 0) { zeroConfirm = false; return label; }
+  return zeroConfirm ? "Wirklich mit 0 Karten? Nochmal klicken" : label;
+}
+function zeroSubmit(kind) {
+  if (notesCount(selected) === 0 && !zeroConfirm) { zeroConfirm = true; renderActions(); return; }
+  zeroConfirm = false;
+  act({ kind, notes: selected });
+}
 const notesSum = (c) => c.reduce((s, x, i) => s + x * V.denoms[i], 0);
 const notesCount = (c) => c.reduce((s, x) => s + x, 0);
 
+let keyHandler = null;
+document.addEventListener("keydown", (e) => {
+  const menuOpen = $("#menu").classList.contains("open") || $("#log").classList.contains("open");
+  if (keyHandler && !menuOpen && !$("#overlay").classList.contains("show")) keyHandler(e);
+});
+let zeroConfirm = false;   // Gebot mit 0 Karten muss bestätigt werden
+let panelErr = null, panelErrUntil = 0;
+
 function renderActions() {
+  keyHandler = null;
   const box = $("#actions");
   const P = V.players[V.me];
   const mine = V.to_act === V.me && V.phase !== "over";
@@ -576,6 +602,7 @@ function renderActions() {
     let txt = V.to_act === null ? "" : `${nameOf(V.to_act)} ist am Zug`;
     if (V.phase === "trade" && V.trade && !V.trade.involved) txt = `${nameOf(V.trade.challenger)} und ${nameOf(V.trade.target)} handeln`;
     if (V.phase === "auction" && V.auction && V.auction.auctioneer === V.me && V.auction.stage === "bidding") txt = `Du versteigerst – ${txt}`;
+    if (V.phase === "auction" && V.auction && V.auction.excluded.includes(V.me)) txt = `Du bist von dieser Versteigerung ausgeschlossen – ${txt}`;
     box.innerHTML = `<div class="waiting">${txt}<span class="dots"></span></div>`;
     return;
   }
@@ -583,35 +610,62 @@ function renderActions() {
   if (V.phase === "auction" && au.stage === "bidding") {
     const min = au.min_bid;
     const key = `${au.card}-${V.deck_left}-${au.excluded.length}-${min}`;
-    if (key !== bidKey || bidValue < min || bidValue > V.cap) { bidKey = key; bidValue = min; }
-    const quick = [["+10", min], ["+50", min + 40], ["+100", min + 90], ["+200", min + 190]].filter(([, x]) => x <= V.cap);
+    const fresh = key !== bidKey;
+    if (fresh) { bidKey = key; bidValue = min; }
+    const context = au.high === null ? "Noch kein Gebot"
+      : `Höchstgebot <b class="num">${au.amount}</b> · 👑 ${nameOf(au.high)}`;
+    const redo = au.excluded.length ? `<div class="ctx redo">🔁 Wiederholung – ${au.excluded.map(nameOf).join(", ")} ausgeschlossen</div>` : "";
+    const quick = [["Minimum", min], ["+50", min + 40], ["+100", min + 90], ["Limit", V.cap]]
+      .filter(([, x], i, arr) => arr.findIndex(([, y]) => y === x) === i);
     box.innerHTML = `
-      <h4>Dein Gebot für ${V.animals[au.card].name}</h4>
+      <h4>Dein Gebot für ${V.animals[au.card].name} <span class="ctx">· ${context}</span></h4>${redo}
       <div class="btns">
         <button class="btn small" id="bm">−10</button>
-        <input class="bid-input" id="bv" type="number" step="10" min="${min}" max="${V.cap}" value="${bidValue}">
+        <input class="bid-input" id="bv" type="text" inputmode="numeric" value="${bidValue}" autocomplete="off">
         <button class="btn small" id="bp">+10</button>
         <button class="btn primary" id="bgo">Bieten</button>
         <button class="btn danger" id="bpass">Passen</button>
       </div>
-      <div class="btns" style="margin-top:8px">${quick.map(([l, q]) => `<button class="btn small" data-q="${q}" title="${q}">${l}</button>`).join("")}</div>
+      <div class="btns quick">${quick.map(([l, q]) => `<button class="btn small" data-q="${q}" ${q > V.cap ? "disabled" : ""}>${l} <small>${q}</small></button>`).join("")}</div>
       <div class="hint" id="bhint"></div>`;
-    const upd = () => {
-      $("#bv").value = bidValue;
+    const input = $("#bv");
+    const valid = () => Number.isInteger(bidValue) && bidValue % 10 === 0 && bidValue >= min && bidValue <= V.cap;
+    const upd = (fromInput) => {
+      if (!fromInput) input.value = bidValue;
       const h = $("#bhint");
-      h.className = "hint" + (bidValue > P.cash ? " warn" : "");
-      h.textContent = bidValue > P.cash
-        ? `Bluff! Du hast nur ${P.cash}. Nimmt der Versteigerer das Geld, fliegst du auf.`
-        : `Mindestens ${min} · Limit ${V.cap} (= 2 × Bargeld + 100) · Enter = bieten`;
+      const go = $("#bgo");
+      let msg = `Min. ${min} · Limit ${V.cap} (2× Bargeld + 100) · Enter bietet, Esc passt`;
+      let cls = "hint";
+      if (!valid()) {
+        cls += " warn";
+        msg = bidValue > V.cap ? `Über deinem Limit von ${V.cap}.` : bidValue < min ? `Zu wenig – mindestens ${min}.` : "Nur Vielfache von 10.";
+      } else if (bidValue > P.cash) {
+        cls += " warn";
+        msg = `Bluff! Du hast nur ${P.cash}. Nimmt der Versteigerer das Geld, fliegst du auf.`;
+      }
+      h.className = cls;
+      h.textContent = msg;
+      go.disabled = !valid();
+      go.textContent = valid() && bidValue > P.cash ? `Bluffen (${bidValue})` : "Bieten";
+      go.classList.toggle("bluff", valid() && bidValue > P.cash);
+      $("#bm").disabled = bidValue - 10 < min;
+      $("#bp").disabled = bidValue + 10 > V.cap;
     };
+    const submit = () => { if (valid()) act({ kind: "bid", amount: bidValue }); };
     upd();
-    $("#bm").onclick = () => { bidValue = Math.max(min, bidValue - 10); upd(); };
-    $("#bp").onclick = () => { bidValue = Math.min(V.cap, bidValue + 10); upd(); };
-    $("#bv").oninput = (e) => { bidValue = Math.round((+e.target.value || min) / 10) * 10; };
-    $("#bv").onkeydown = (e) => { if (e.key === "Enter") act({ kind: "bid", amount: bidValue }); };
-    box.querySelectorAll("[data-q]").forEach((b) => (b.onclick = () => { bidValue = +b.dataset.q; upd(); }));
-    $("#bgo").onclick = () => act({ kind: "bid", amount: bidValue });
+    $("#bm").onclick = () => { bidValue = Math.max(min, Math.ceil(bidValue / 10) * 10 - 10); upd(); };
+    $("#bp").onclick = () => { bidValue = Math.min(V.cap, Math.floor(bidValue / 10) * 10 + 10); upd(); };
+    input.oninput = () => { bidValue = parseInt(input.value.replace(/\D/g, ""), 10) || 0; upd(true); };
+    box.querySelectorAll("[data-q]").forEach((b) => (b.onclick = () => { bidValue = +b.dataset.q; upd(); input.focus(); }));
+    $("#bgo").onclick = submit;
     $("#bpass").onclick = () => act({ kind: "pass" });
+    keyHandler = (e) => {
+      if (e.key === "Enter") { e.preventDefault(); submit(); }
+      else if (e.key === "Escape") { e.preventDefault(); act({ kind: "pass" }); }
+      else if (e.key === "ArrowUp") { e.preventDefault(); $("#bp").click(); }
+      else if (e.key === "ArrowDown") { e.preventDefault(); $("#bm").click(); }
+    };
+    if (fresh || document.activeElement === document.body) { input.focus(); input.select(); }
     return;
   }
   if (V.phase === "auction" && au.stage === "choice") {
@@ -619,12 +673,16 @@ function renderActions() {
     box.innerHTML = `
       <h4>${nameOf(au.high)} bietet <span class="num" style="font-size:24px">${au.amount}</span> für ${V.animals[au.card].name}</h4>
       <div class="btns">
-        <button class="btn primary" id="take">💰 Geld nehmen</button>
-        <button class="btn go" id="buy" ${canBuy ? "" : "disabled"}>✋ Selbst kaufen (${au.amount})</button>
+        <button class="btn primary" id="take">💰 ${au.amount} nehmen <small>G</small></button>
+        <button class="btn go" id="buy" ${canBuy ? "" : "disabled"}>✋ Selbst kaufen (${au.amount}) <small>K</small></button>
       </div>
-      <div class="hint">${canBuy ? "Vorkaufsrecht: Du zahlst den Betrag und behältst die Karte." : "Für das Vorkaufsrecht reicht dein Bargeld nicht."}</div>`;
+      <div class="hint">${canBuy ? "Geld nehmen: Du bekommst das Geld, der Bieter die Karte. Selbst kaufen: Du zahlst den Betrag und behältst die Karte." : "Für das Vorkaufsrecht reicht dein Bargeld nicht."}</div>`;
     $("#take").onclick = () => act({ kind: "take" });
     if (canBuy) $("#buy").onclick = () => act({ kind: "buy" });
+    keyHandler = (e) => {
+      if (e.key === "g" || e.key === "G") act({ kind: "take" });
+      if ((e.key === "k" || e.key === "K") && canBuy) act({ kind: "buy" });
+    };
     return;
   }
   if (V.phase === "trade" && !V.trade) {
@@ -639,11 +697,11 @@ function renderActions() {
   if (t.stage === "offer") {
     if (selectMode !== "offer") { selectMode = "offer"; renderWallet(); renderOfferPile(); }
     box.innerHTML = `<h4>Verdecktes Gebot für ${t.k}× ${V.animals[t.animal].name} von ${nameOf(t.target)}</h4>
-      <div>${notesCount(selected)} Karten · Wert <span class="num" style="font-size:20px">${notesSum(selected)}</span></div>
-      <div class="btns" style="margin-top:10px"><button class="btn primary" id="go">Verdeckt hinlegen</button></div>
+      <div>${cardsLabel(notesCount(selected))} · Wert <span class="num" style="font-size:20px">${notesSum(selected)}</span></div>
+      <div class="btns" style="margin-top:10px"><button class="btn primary" id="go">${zeroGo()}</button></div>
       ${overWarn(selected)}
-      <div class="hint">${nameOf(t.target)} sieht nur die Anzahl der Karten – 0er-Karten eignen sich zum Bluffen.</div>`;
-    $("#go").onclick = () => act({ kind: "offer", notes: selected });
+      <div class="hint">${nameOf(t.target)} sieht nur die Anzahl der Karten – 0er-Karten eignen sich zum Bluffen. Die Herausforderung ist verbindlich.</div>`;
+    $("#go").onclick = () => zeroSubmit("offer");
     return;
   }
   if (selectMode !== "counter") {
@@ -655,10 +713,10 @@ function renderActions() {
     return;
   }
   box.innerHTML = `<h4>Dein verdecktes Gegengebot (${nameOf(t.challenger)} bietet ${t.offer_count} Karte${t.offer_count === 1 ? "" : "n"})</h4>
-    <div>${notesCount(selected)} Karten · Wert <span class="num" style="font-size:20px">${notesSum(selected)}</span></div>
-    <div class="btns" style="margin-top:10px"><button class="btn primary" id="go">Gegengebot legen</button><button class="btn small" id="back">Zurück</button></div>
+    <div>${cardsLabel(notesCount(selected))} · Wert <span class="num" style="font-size:20px">${notesSum(selected)}</span></div>
+    <div class="btns" style="margin-top:10px"><button class="btn primary" id="go">${zeroGo("Gegengebot legen")}</button><button class="btn small" id="back">Zurück</button></div>
     ${overWarn(selected)}`;
-  $("#go").onclick = () => act({ kind: "counter", notes: selected });
+  $("#go").onclick = () => zeroSubmit("counter");
   $("#back").onclick = () => { selectMode = null; selected = [0, 0, 0, 0, 0, 0]; render(); };
 }
 

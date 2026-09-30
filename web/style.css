@@ -325,11 +325,11 @@ button { font-family: inherit; cursor: pointer; }
 .full > .cnt { background: #3aa655 !important; color: #fff !important; border-color: var(--paper) !important; }
 
 /* ================================================================ Phase 2 (Kuhhandel) */
-#stage.p2 #center { top: 284px; gap: 150px; }
+#stage.p2 #center { top: 274px; gap: 150px; }
 #stage.p2 #pile-area { --mid-w: 104px; --mid-h: 156px; }
 #stage.p2 #hand { width: 880px; }
 #stage.p2 #me-plate { left: 86px; bottom: 236px; transform: none; }
-#stage.p2 #actions { bottom: 262px; padding: 10px 16px 12px; }
+#stage.p2 #actions { bottom: 254px; padding: 10px 16px 12px; }
 #stage.p2 #actions h4 { margin-bottom: 6px; }
 #stage.p2 #offer-pile { bottom: 318px; height: 150px; }
 #stage.p2 #offer-pile .card { width: 84px !important; height: 126px !important; }
@@ -400,3 +400,43 @@ button { font-family: inherit; cursor: pointer; }
 .seat.rside .bubble::before { left: auto; right: -11px; border-right: 0; border-left: 8px solid var(--wood); }
 /* Stapel-Beschriftung über dem Stapel statt unter dem Gebotsfeld */
 #deck-count { bottom: auto; top: -34px; }
+
+/* ---- Aktionsfeld: Kontext, Schnellwahl, Fehler, Größen ---- */
+#actions { width: 520px; }
+#actions h4 { font-size: 19px; }
+#actions .hint { font-size: 15px; }
+#actions .ctx { font-size: 15px; font-weight: 500; color: var(--ink-soft); }
+#actions .ctx.redo { display: block; margin: -4px 0 8px; }
+#actions .ctx b { color: var(--ink); font-size: 18px; font-weight: 400; }
+#actions .ctx.redo { color: #b3342f; font-weight: 600; margin-top: -4px; }
+.btn.small { padding: 6px 12px; font-size: 15px; }
+.btns.quick { margin-top: 8px; }
+.btns.quick .btn { min-width: 70px; }
+.btns.quick .btn small { font-family: "Lilita One"; font-size: 13px; opacity: .75; }
+.btn small { font-size: 11px; opacity: .6; margin-left: 4px; }
+.btn.bluff { background: #f7c9c3; border-color: #b3342f; box-shadow: 0 4px 0 #b3342f; }
+.bid-input { width: 130px; }
+.perr {
+  position: absolute; left: 50%; top: -44px; transform: translateX(-50%); white-space: nowrap; z-index: 5;
+  background: #b3342f; color: #fff; padding: 5px 14px; border-radius: 99px; font-size: 15px; font-weight: 600;
+  box-shadow: 0 4px 12px rgba(0,0,0,.4); animation: pop .25s ease-out;
+}
+.chip { font-size: 14px; }
+.chip b { font-size: 16px; }
+
+/* ---- Phase 2: Gegner hinter eigener Karte größer, im Tisch bleiben, Panel beim Hover zurücknehmen ---- */
+.hgroup .pops { transform: translateX(var(--shift, 0px)); }
+.pop { width: 120px; height: 150px; margin-left: -60px; }
+.pop .pn { font-size: 15px; }
+.pop .pc { font-size: 14px; }
+.pop .pa { font-size: 13px; }
+#stage:has(#hand .hgroup:hover .pop) #actions { opacity: .25; transition: opacity .15s; }
+
+/* ---- Phase 2: Abstände unten links ---- */
+#stage.p2 #me-plate { bottom: 250px; }
+#stage.p2 #wallet { width: 520px; }
+#offer-pile .title { max-width: 380px; white-space: normal; }
+
+/* ---- Markierte Gegnerkarten ganz klickbar (liegen über den Nachbarn) ---- */
+.ogroup.pick { z-index: 100 !important; }
+#plaque .history { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
