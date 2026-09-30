@@ -578,3 +578,23 @@ button { font-family: inherit; cursor: pointer; }
 .reveal .rc.still .rf { transition: none; }
 /* dezentere Abdunklung beim Aufdecken einer neuen Versteigerungskarte */
 #dim.soft.on { opacity: .6; }
+
+/* ================================================================ Abdunkeln mit bis zu zwei Lichtkegeln (Maske) */
+@property --s2x { syntax: "<length>"; inherits: false; initial-value: 800px; }
+@property --s2y { syntax: "<length>"; inherits: false; initial-value: 400px; }
+@property --r2x { syntax: "<length>"; inherits: false; initial-value: 220px; }
+@property --r2y { syntax: "<length>"; inherits: false; initial-value: 160px; }
+#dim {
+  background: rgba(6,3,1,.66);
+  -webkit-mask-image:
+    radial-gradient(ellipse var(--rx) var(--ry) at var(--sx) var(--sy), transparent 0%, transparent 58%, #000 100%),
+    radial-gradient(ellipse var(--r2x) var(--r2y) at var(--s2x) var(--s2y), transparent 0%, transparent 58%, #000 100%);
+  -webkit-mask-composite: source-in;
+  mask-image:
+    radial-gradient(ellipse var(--rx) var(--ry) at var(--sx) var(--sy), transparent 0%, transparent 58%, #000 100%),
+    radial-gradient(ellipse var(--r2x) var(--r2y) at var(--s2x) var(--s2y), transparent 0%, transparent 58%, #000 100%);
+  mask-composite: intersect;
+  transition: opacity .35s ease,
+    --sx .65s cubic-bezier(.4,.1,.2,1), --sy .65s cubic-bezier(.4,.1,.2,1), --rx .65s, --ry .65s,
+    --s2x .65s cubic-bezier(.4,.1,.2,1), --s2y .65s cubic-bezier(.4,.1,.2,1), --r2x .65s, --r2y .65s;
+}

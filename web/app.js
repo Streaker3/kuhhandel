@@ -254,17 +254,24 @@ function applySeatLayout(seat, p, wide) {
 }
 
 /** Tisch abdunkeln, nur ein Bereich bleibt im Licht. */
-function dimAt(rect, { instant = false } = {}) {
+function dimAt(rect, { instant = false, second = null } = {}) {
   const st = $("#stage").getBoundingClientRect();
   const s = st.width / 1600;
   const d = $("#dim");
-  const cx = (rect.left + rect.width / 2 - st.left) / s, cy = (rect.top + rect.height / 2 - st.top) / s;
-  const rx = Math.max(170, rect.width / s / 2 + 90), ry = Math.max(130, rect.height / s / 2 + 70);
+  const geo = (r) => ({
+    cx: (r.left + r.width / 2 - st.left) / s, cy: (r.top + r.height / 2 - st.top) / s,
+    rx: Math.max(170, r.width / s / 2 + 90), ry: Math.max(130, r.height / s / 2 + 70),
+  });
+  const a = geo(rect), b = second ? geo(second) : a;   // ohne zweiten Kegel liegen beide übereinander
   if (instant) d.style.transition = "opacity .3s";
-  d.style.setProperty("--sx", `${cx}px`);
-  d.style.setProperty("--sy", `${cy}px`);
-  d.style.setProperty("--rx", `${rx}px`);
-  d.style.setProperty("--ry", `${ry}px`);
+  d.style.setProperty("--sx", `${a.cx}px`);
+  d.style.setProperty("--sy", `${a.cy}px`);
+  d.style.setProperty("--rx", `${a.rx}px`);
+  d.style.setProperty("--ry", `${a.ry}px`);
+  d.style.setProperty("--s2x", `${b.cx}px`);
+  d.style.setProperty("--s2y", `${b.cy}px`);
+  d.style.setProperty("--r2x", `${b.rx}px`);
+  d.style.setProperty("--r2y", `${b.ry}px`);
   if (instant) { void d.offsetWidth; d.style.transition = ""; }
   d.classList.add("on");
 }
@@ -291,14 +298,25 @@ function unfocusSeat(keepDim) {
 }
 
 /** Versteigerung: kurz abdunkeln, während die neue Karte aufgedeckt wird (nicht im Tempo „Schnell“). */
+let lastAuctioneer = null;
 function spotlightCard() {
-  if (FAST || speed === 2 || focusP !== null) return;
-  const area = $("#pile-area");
+  const au = V.auction;
+  const now = au ? au.auctioneer : null;
+  const prevA = lastAuctioneer;
+  lastAuctioneer = now;
+  if (FAST || speed === 2 || focusP !== null || now === null) return;
+  const elOf = (p) => (p === V.me ? $("#me-plate") : document.querySelector(`.seat[data-p="${p}"]`));
+  const card = () => $("#pile-area").getBoundingClientRect();
   clearTimeout(dimTimer);
   setTimeout(() => {
+    const from = prevA !== null && prevA !== now ? elOf(prevA) : null;
+    const to = elOf(now);
+    if (!to) return;
     $("#dim").classList.add("soft");
-    dimAt(area.getBoundingClientRect(), { instant: true });
-    dimTimer = setTimeout(() => { undim(); setTimeout(() => $("#dim").classList.remove("soft"), 400); }, 1150);
+    // erst beim vorherigen Versteigerer, dann wandert der Kegel zum neuen; die Karte ist durchgehend im Licht
+    dimAt((from || to).getBoundingClientRect(), { instant: true, second: card() });
+    if (from) setTimeout(() => dimAt(to.getBoundingClientRect(), { second: card() }), 120);
+    dimTimer = setTimeout(() => { undim(); setTimeout(() => $("#dim").classList.remove("soft"), 400); }, 1500);
   }, 20);
 }
 
