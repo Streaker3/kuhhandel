@@ -25,7 +25,7 @@ import torch.nn.functional as F
 from kuhhandel.bots import HeuristicBot
 from kuhhandel.encode import decode_action, legal_mask, obs_size, observe
 from kuhhandel.engine import Game
-from kuhhandel.model import PolicyNet
+from kuhhandel.model import PolicyNet, adapt_state
 
 ROOT = Path(__file__).parent
 CKPT = ROOT / "checkpoints"
@@ -38,7 +38,7 @@ PLAYER_WEIGHTS = (0.3, 0.4, 0.3)
 # ====================================================================== Rollouts
 def _new_net(state, hidden):
     net = PolicyNet(hidden=hidden)
-    net.load_state_dict(state)
+    net.load_state_dict(adapt_state(state))
     net.eval()
     return net
 
@@ -272,8 +272,13 @@ def main():
     elapsed0, games0, best = 0.0, 0, -1.0
     if args.resume and (CKPT / "latest.pt").exists():
         ck = torch.load(CKPT / "latest.pt", weights_only=False)
-        net.load_state_dict(ck["model"]); opt.load_state_dict(ck["opt"])
-        start_it, league = ck["iter"], ck.get("league", [])
+        grown = ck["model"]["body.0.weight"].shape[1] < obs_size()
+        net.load_state_dict(adapt_state(ck["model"]))
+        if grown:
+            print(f"Beobachtung erweitert auf {obs_size()} Eingaben – Netz angepasst, Optimizer neu gestartet")
+        else:
+            opt.load_state_dict(ck["opt"])
+        start_it, league = ck["iter"], [adapt_state(s_) for s_ in ck.get("league", [])]
         elapsed0, games0 = ck.get("elapsed_min", 0.0), ck.get("games_total", 0)
         best = ck.get("best", -1.0)
         print(f"Fortsetzen ab Iteration {start_it}, Liga: {len(league)} Versionen")

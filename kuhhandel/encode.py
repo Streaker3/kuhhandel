@@ -192,6 +192,18 @@ def observe(g: Game, me: int | None = None) -> np.ndarray:
             VALUES[t["animal"]] / M,
         ]
     f += ta + tf + opp
+
+    # ---- Öffentlicher Kuhhandel (für alle sichtbar: wer mit wem um welches Tier; keine Gebote)
+    pub = [0.0] * (1 + 2 * MAX_SEATS + NUM_ANIMALS + 1 + 2)
+    if t is not None:
+        pub[0] = 1.0
+        pub[1 + (t["challenger"] - me) % g.n] = 1.0
+        pub[1 + MAX_SEATS + (t["target"] - me) % g.n] = 1.0
+        pub[1 + 2 * MAX_SEATS + t["animal"]] = 1.0
+        pub[1 + 2 * MAX_SEATS + NUM_ANIMALS] = t["k"] / 2.0
+        pub[-2] = 1.0 if t["stage"] == "offer" else 0.0
+        pub[-1] = 1.0 if t["stage"] == "respond" else 0.0
+    f += pub
     return np.asarray(f, dtype=np.float32)
 
 

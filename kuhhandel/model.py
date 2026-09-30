@@ -31,10 +31,22 @@ class PolicyNet(nn.Module):
         return logits, self.v(h).squeeze(-1)
 
 
+def adapt_state(state: dict, obs_dim: int | None = None) -> dict:
+    """Ältere Netze auf eine größere Beobachtung erweitern: neue Eingaben bekommen Gewicht 0,
+    das Verhalten bleibt also exakt gleich, bis das Training die neuen Eingaben nutzt."""
+    obs_dim = obs_dim or obs_size()
+    w = state["body.0.weight"]
+    if w.shape[1] < obs_dim:
+        state = dict(state)
+        pad = torch.zeros(w.shape[0], obs_dim - w.shape[1], dtype=w.dtype)
+        state["body.0.weight"] = torch.cat([w, pad], dim=1)
+    return state
+
+
 def load_net(path, map_location="cpu") -> PolicyNet:
     ckpt = torch.load(path, map_location=map_location, weights_only=False)
-    net = PolicyNet(ckpt.get("obs_dim"), ckpt.get("hidden", 512))
-    net.load_state_dict(ckpt["model"])
+    net = PolicyNet(obs_size(), ckpt.get("hidden", 512))
+    net.load_state_dict(adapt_state(ckpt["model"]))
     net.eval()
     return net
 
