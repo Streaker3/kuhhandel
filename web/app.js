@@ -107,6 +107,11 @@ function applyView(view, events) {
   render();
   runFlights(flights);
   if (prev && events.length < 25) quartetMoments(prev);
+  if (V.phase === "trade" && !V.trade && V.to_act !== null && V.to_act !== lastTurnP) {
+    if (prev && prev.phase === "trade") setTimeout(() => spotlightTurn(lastTurnP, V.to_act), 700);
+    lastTurnP = V.to_act;
+  }
+  if (focusP !== null && !(V.phase === "trade" && !V.trade && V.to_act === V.me)) unfocusSeat();
   scheduleBot(events);
 }
 
@@ -226,6 +231,77 @@ const ROW_STEP = 88;                 // vertikaler Abstand zweier Kartenreihen b
 const groupWidth = (c, w, dx) => (c === 4 ? w + 3 * 3 : w + (c - 1) * dx);
 const groupDX = (c, dx) => (c === 4 ? 3 : dx);
 
+// --------------------------------------------------------------- Fokus / Scheinwerfer
+let focusP = null;       // Gegner, dessen Auslage gerade aufgefächert ist
+let lastTurnP = null;    // wer zuletzt im Kuhhandel am Zug war (für den wandernden Scheinwerfer)
+let dimTimer = null;
+
+/** Auslage eines Gegners normal oder breit aufgefächert anordnen (animiert über CSS-Übergänge). */
+function applySeatLayout(seat, p, wide) {
+  const x = +seat.dataset.x, w = +seat.dataset.w, rows = +seat.dataset.rows;
+  const W = wide ? (rows === 1 ? 760 : 470) : w;
+  const lay = seatLayout(p, W, rows, wide ? 16 : 8);
+  // im Tisch bleiben
+  const cx = Math.min(Math.max(x, 70 + W / 2), 1530 - W / 2);
+  seat.style.left = `${cx}px`;
+  seat.style.width = `${W}px`;
+  const box = seat.querySelector(".opp-animals");
+  if (box) { box.style.width = `${lay.boxW}px`; box.style.height = `${lay.h}px`; }
+  seat.querySelectorAll(".ogroup").forEach((g) => {
+    const q = lay.pos[+g.dataset.a];
+    if (q) { g.style.left = `${q.left}px`; g.style.top = `${q.top}px`; }
+  });
+}
+
+/** Tisch abdunkeln, nur ein Bereich bleibt im Licht. */
+function dimAt(rect, { instant = false } = {}) {
+  const st = $("#stage").getBoundingClientRect();
+  const s = st.width / 1600;
+  const d = $("#dim");
+  const cx = (rect.left + rect.width / 2 - st.left) / s, cy = (rect.top + rect.height / 2 - st.top) / s;
+  const rx = Math.max(170, rect.width / s / 2 + 90), ry = Math.max(130, rect.height / s / 2 + 70);
+  if (instant) d.style.transition = "opacity .3s";
+  d.style.setProperty("--sx", `${cx}px`);
+  d.style.setProperty("--sy", `${cy}px`);
+  d.style.setProperty("--rx", `${rx}px`);
+  d.style.setProperty("--ry", `${ry}px`);
+  if (instant) { void d.offsetWidth; d.style.transition = ""; }
+  d.classList.add("on");
+}
+const undim = () => $("#dim").classList.remove("on");
+
+function focusSeat(p) {
+  const seat = document.querySelector(`.seat[data-p="${p}"]`);
+  if (!seat) return;
+  clearTimeout(dimTimer);
+  if (focusP !== null && focusP !== p) unfocusSeat(true);
+  focusP = p;
+  seat.classList.add("focus");
+  $("#stage").classList.add("focusing");
+  applySeatLayout(seat, p, true);
+  setTimeout(() => { if (focusP === p) dimAt(seat.getBoundingClientRect(), { instant: !$("#dim").classList.contains("on") }); }, 60);
+}
+function unfocusSeat(keepDim) {
+  if (focusP === null) return;
+  const seat = document.querySelector(`.seat[data-p="${focusP}"]`);
+  focusP = null;
+  if (seat) { seat.classList.remove("focus"); applySeatLayout(seat, +seat.dataset.p, false); }
+  $("#stage").classList.remove("focusing");
+  if (!keepDim) undim();
+}
+
+/** Im Kuhhandel: Tisch kurz abdunkeln und den Scheinwerfer zum nächsten Spieler wandern lassen. */
+function spotlightTurn(from, to) {
+  if (FAST || focusP !== null) return;
+  const elOf = (p) => (p === V.me ? $("#me-plate") : document.querySelector(`.seat[data-p="${p}"]`));
+  const a = from !== null ? elOf(from) : null, b = elOf(to);
+  if (!b) return;
+  clearTimeout(dimTimer);
+  if (a) dimAt(a.getBoundingClientRect(), { instant: true });
+  setTimeout(() => dimAt(b.getBoundingClientRect()), a ? 120 : 0);
+  dimTimer = setTimeout(() => { if (focusP === null) undim(); }, 1500);
+}
+
 // --------------------------------------------------------------- Render
 function render() {
   if (!V || V.phase === "none") return;
@@ -242,6 +318,25 @@ function render() {
   if (V.phase === "over") showResults();
 }
 
+/** Positionen der Tiergruppen eines Gegners bei gegebener Breite/Reihenzahl. */
+function seatLayout(p, width, rows, gap = 8) {
+  const groups = [];
+  shownAnimals(p).forEach((c, a) => { if (c) groups.push([a, c]); });
+  const DX = 10;
+  const perRow = Math.max(1, Math.ceil(groups.length / rows));
+  const usedRows = Math.max(1, Math.ceil(groups.length / perRow));
+  const pos = {};
+  let boxW = 0;
+  for (let r = 0; r < usedRows; r++) {
+    const rowGroups = groups.slice(r * perRow, (r + 1) * perRow);
+    const widths = rowGroups.map(([, c]) => groupWidth(c, OPP.w, DX));
+    const { xs, width: rw } = packPositions(widths, width, gap);
+    boxW = Math.max(boxW, rw);
+    rowGroups.forEach(([a], gi) => { pos[a] = { left: xs[gi], top: r * ROW_STEP, width: widths[gi], z: r * 20 + gi + 1 }; });
+  }
+  return { groups, pos, boxW, h: OPP.h + (usedRows - 1) * ROW_STEP + 8 };
+}
+
 function seatHTML(p, width, rows) {
   const P = V.players[p];
   const revealed = P.revealed !== undefined ? ` · <span title="nach Zahlungsunfähigkeit offengelegt">💰${P.revealed}</span>` : "";
@@ -254,29 +349,19 @@ function seatHTML(p, width, rows) {
   const moneyBox = `<div class="mini-money" style="width:${k ? 40 + 5 * (k - 1) : 40}px" title="Geld (nur grob sichtbar)">${money || '<span class="broke">pleite</span>'}</div>`;
   // Tiere: pro Art ein Stapel, bei seitlichen Gegnern auf zwei Reihen verteilt
   const pickable = new Set((V.options || []).filter((o) => o.target === p).map((o) => o.animal));
-  const groups = [];
-  shownAnimals(p).forEach((c, a) => { if (c) groups.push([a, c]); });
+  const { groups, pos, boxW, h } = seatLayout(p, width, rows);
   const DX = 10;
-  const perRow = Math.max(1, Math.ceil(groups.length / rows));
   let animals = "";
-  let boxW = 0;
-  const usedRows = Math.max(1, Math.ceil(groups.length / perRow));
-  for (let r = 0; r < usedRows; r++) {
-    const rowGroups = groups.slice(r * perRow, (r + 1) * perRow);
-    const widths = rowGroups.map(([, c]) => groupWidth(c, OPP.w, DX));
-    const { xs, width: rw } = packPositions(widths, width, 8);
-    boxW = Math.max(boxW, rw);
-    rowGroups.forEach(([a, c], gi) => {
-      const dx = groupDX(c, DX);
-      let cards = "";
-      for (let i = 0; i < c; i++) cards += `<div class="card opp" style="left:${i * dx}px;bottom:${c === 4 ? i : i * 3}px;background-image:url(${tierImg(animalKey(a))})"></div>`;
-      const pick = pickable.has(a);
-      animals += `<div class="ogroup${c === 4 ? " full" : ""}${pick ? " pick" : ""}" data-a="${a}"
-        style="left:${xs[gi]}px;top:${r * ROW_STEP}px;width:${widths[gi]}px;z-index:${r * 20 + gi + 1}"
-        title="${V.animals[a].name} · ${V.animals[a].value} · ${c === 4 ? "Quartett komplett" : `${c}/4`}${pick ? " – klicken zum Herausfordern" : ""}">${cards}<span class="cnt">${c === 4 ? "✓" : c}</span></div>`;
-    });
-  }
-  const h = OPP.h + (usedRows - 1) * ROW_STEP + 8;
+  groups.forEach(([a, c]) => {
+    const dx = groupDX(c, DX);
+    const q = pos[a];
+    let cards = "";
+    for (let i = 0; i < c; i++) cards += `<div class="card opp" style="left:${i * dx}px;bottom:${c === 4 ? i : i * 3}px;background-image:url(${tierImg(animalKey(a))})"></div>`;
+    const pick = pickable.has(a);
+    animals += `<div class="ogroup${c === 4 ? " full" : ""}${pick ? " pick" : ""}" data-a="${a}"
+      style="left:${q.left}px;top:${q.top}px;width:${q.width}px;z-index:${q.z}"
+      title="${V.animals[a].name} · ${V.animals[a].value} · ${c === 4 ? "Quartett komplett" : `${c}/4`}${pick ? " – klicken zum Herausfordern" : ""}">${cards}<span class="cnt">${c === 4 ? "✓" : c}</span></div>`;
+  });
   const animalsBox = groups.length
     ? `<div class="opp-animals" style="width:${boxW}px;height:${h}px">${animals}</div>`
     : `<div class="no-animals">noch keine Tiere</div>`;
@@ -307,9 +392,12 @@ function renderSeats() {
   want.forEach((p, i) => {
     const seat = box.querySelector(`.seat[data-p="${p}"]`);
     const [x, y, w, rows] = pos[i];
-    seat.style.left = `${x}px`;
+    seat.dataset.x = x; seat.dataset.w = w; seat.dataset.rows = rows;
+    if (focusP !== p) {
+      seat.style.left = `${x}px`;
+      seat.style.width = `${w}px`;
+    }
     seat.style.top = `${y}px`;
-    seat.style.width = `${w}px`;
     seat.classList.toggle("active", V.to_act === p);
     seat.classList.toggle("spot", !!(V.auction && V.phase === "auction" && V.auction.auctioneer === p));
     seat.classList.toggle("rside", x > 1200);
@@ -318,6 +406,7 @@ function renderSeats() {
       seat.dataset.html = html;
       seat.innerHTML = html;
       seat.querySelectorAll(".ogroup.pick").forEach((g) => (g.onclick = () => act({ kind: "challenge", target: p, animal: +g.dataset.a })));
+      if (focusP === p) applySeatLayout(seat, p, true);
     }
   });
 }
@@ -577,7 +666,9 @@ function popsFor(a, c, options) {
         <div class="pc"><b>${n}</b>× ${full ? "(komplett)" : ""}</div>
         ${active ? `<div class="pa">⚔ Herausfordern</div>` : ""}`;
       pop.title = active ? `${V.players[q].name} um ${V.animals[a].name} herausfordern` : `${V.players[q].name} hat ${n}× ${V.animals[a].name}`;
-      if (active) pop.onclick = (e) => { e.stopPropagation(); act({ kind: "challenge", target: q, animal: a }); };
+      if (active) pop.onclick = (e) => { e.stopPropagation(); unfocusSeat(); act({ kind: "challenge", target: q, animal: a }); };
+      pop.onmouseenter = () => focusSeat(q);
+      pop.onmouseleave = () => unfocusSeat();
     }
     box.appendChild(pop);
   });
@@ -1001,7 +1092,7 @@ function showReveal(ev, done) {
       <div class="rside"><div class="rwho">${nameOf(other)}</div>
         <div class="rcards">${back(Math.max(oppCards.length, 0), "opp") || '<span class="rempty">leerer Stapel</span>'}</div>
         <div class="rsum num" id="rv-opp">0</div></div>
-      ${mine ? `<div class="rvs">gegen</div>
+      ${mine ? `<div class="rmid"><div class="rvs">gegen</div><div class="rdelta" id="rv-delta"></div></div>
       <div class="rside"><div class="rwho">Du <span class="rhint">(verdeckt)</span></div>
         <div class="rcards">${back(mine.length, "mine") || '<span class="rempty">leerer Stapel</span>'}</div>
         <div class="rsum num">${mySum}</div></div>` : ""}
@@ -1010,23 +1101,36 @@ function showReveal(ev, done) {
   const cards = [...box.querySelectorAll(".rc.opp")];
   cards.forEach((c, i) => { c.querySelector(".rfront").style.backgroundImage = `url(${geldImg(oppCards[i])})`; });
   let shown = 0;
-  const STEP = Math.max(140, Math.min(260, 1500 / Math.max(1, cards.length)));
+  const STEP = Math.max(160, Math.min(300, 1700 / Math.max(1, cards.length)));
+  const START = 1300;   // kurz Spannung aufbauen, bevor die erste Karte umgedreht wird
   cards.forEach((c, i) => setTimeout(() => {
     c.classList.add("up");
     Snd.play("flip");
     shown += oppCards[i];
     const s = $("#rv-opp");
     if (s) { s.textContent = shown; s.classList.remove("bump"); void s.offsetWidth; s.classList.add("bump"); }
-  }, 450 + i * STEP));
-  const end = 450 + cards.length * STEP + 500;
+  }, START + i * STEP));
+  const end = START + cards.length * STEP + 600;
   setTimeout(() => {
+    const dEl = $("#rv-delta");
     if (mine) {
-      // Gewinner: höheres Gebot, Gleichstand -> Herausforderer
+      // Gewinner: höheres Gebot, Gleichstand -> Herausforderer. Differenz = was der Gewinner zahlt.
       const iWin = mySum > oppSum || (mySum === oppSum && iAmC);
+      const diff = mySum - oppSum;
       box.classList.add(iWin ? "win" : "lose");
+      if (dEl) {
+        dEl.className = `rdelta num ${iWin ? "good" : "bad"}`;
+        dEl.innerHTML = `${diff > 0 ? "+" : diff < 0 ? "−" : "±"}${Math.abs(diff)}
+          <small>${diff === 0 ? "kein Geldfluss" : iWin ? `du zahlst ${Math.abs(diff)}` : `du bekommst ${Math.abs(diff)}`}</small>`;
+      }
+      Snd.play(iWin ? "chime" : "lose");
+    } else {
+      const s = $("#rv-opp");
+      if (s) s.insertAdjacentHTML("afterend", `<div class="rdelta num good">+${oppSum}<small>du bekommst ${oppSum}</small></div>`);
+      Snd.play("coins");
     }
   }, end);
-  setTimeout(() => { box.classList.add("out"); setTimeout(() => box.remove(), 350); done(); }, end + 1100);
+  setTimeout(() => { box.classList.add("out"); setTimeout(() => box.remove(), 350); done(); }, end + 2600);
 }
 
 // --------------------------------------------------------------- Quartett-Momente
