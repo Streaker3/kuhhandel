@@ -525,48 +525,48 @@ button { font-family: inherit; cursor: pointer; }
 /* ================================================================ Handy hochkant
    Eigene, schmale Bühne (480 breit, Höhe nach Seitenverhältnis). Oben die Gegner, in der Mitte der Stapel,
    unten von unten nach oben: Aktionsfeld, Geld + eigenes Schild, eigene Tierkarten (per JS platziert). */
-body.portrait {
+body.compact {
   --own-w: 72px; --own-h: 108px;
   --opp-w: 46px; --opp-h: 69px;
   --mid-w: 96px; --mid-h: 144px;
   --wal-w: 56px; --wal-h: 84px;
 }
-body.portrait #stage { background: none; }
+body.compact #stage { background: none; }
 /* Tisch aus dem vorhandenen Bild: Holzrand schmal, Filz gedehnt */
-body.portrait #stage::after {
+body.compact #stage::after {
   content: ""; position: absolute; inset: 0; z-index: -1; pointer-events: none;
   border: 16px solid transparent; border-image: url("assets/web/tisch.webp") 58 fill / 16px stretch;
 }
 body.portrait.felt-port #stage::after { border: none; border-image: none; background: url("assets/web/tisch_hochkant.webp") center / 100% 100% no-repeat; }
-body.portrait #stage::before { left: 16px; right: 16px; top: 16px; bottom: 16px; }
+body.compact #stage::before { left: 16px; right: 16px; top: 16px; bottom: 16px; }
 
 /* Gegner: kompakter Kopf, Gebotsblase unter dem Bild */
-body.portrait .seat-head { gap: 6px; }
-body.portrait .avatar-wrap { width: 40px; height: 40px; }
-body.portrait .avatar { border-width: 2px; box-shadow: 0 0 0 2px var(--wood), 0 4px 10px rgba(0,0,0,.5); }
-body.portrait .active .avatar-wrap::after { inset: -6px; border-width: 2px; }
-body.portrait .badge { width: 22px; height: 22px; font-size: 12px; }
-body.portrait .badge.auct .gavel { width: 15px; height: 15px; }
-body.portrait .nameplate { padding: 2px 9px 3px; border-radius: 10px; }
-body.portrait .nameplate > b { font-size: 15px; }
-body.portrait .nameplate .sub { font-size: 12px; }
-body.portrait .nameplate .role { font-size: 10px; padding: 0 6px; margin-left: 5px; }
-body.portrait .mini-money { height: 40px; }
-body.portrait .seat-cards { margin-top: 6px; }
-body.portrait .no-animals { font-size: 12px; padding: 0 4px 20px; }
-body.portrait .ogroup > .cnt { left: -5px; top: -7px; min-width: 17px; height: 17px; font-size: 10px; padding: 0 3px; border-width: 1.5px; }
-body.portrait .ogroup:hover { transform: translateY(-4px) scale(1.15); }
-body.portrait .ogroup.pick::after { left: 6px; top: -10px; font-size: 13px; }
-body.portrait .bubble, body.portrait .seat.rside .bubble {
+body.compact .seat-head { gap: 6px; }
+body.compact .avatar-wrap { width: 40px; height: 40px; }
+body.compact .avatar { border-width: 2px; box-shadow: 0 0 0 2px var(--wood), 0 4px 10px rgba(0,0,0,.5); }
+body.compact .active .avatar-wrap::after { inset: -6px; border-width: 2px; }
+body.compact .badge { width: 22px; height: 22px; font-size: 12px; }
+body.compact .badge.auct .gavel { width: 15px; height: 15px; }
+body.compact .nameplate { padding: 2px 9px 3px; border-radius: 10px; }
+body.compact .nameplate > b { font-size: 15px; }
+body.compact .nameplate .sub { font-size: 12px; }
+body.compact .nameplate .role { font-size: 10px; padding: 0 6px; margin-left: 5px; }
+body.compact .mini-money { height: 40px; }
+body.compact .seat-cards { margin-top: 6px; }
+body.compact .no-animals { font-size: 12px; padding: 0 4px 20px; }
+body.compact .ogroup > .cnt { left: -5px; top: -7px; min-width: 17px; height: 17px; font-size: 10px; padding: 0 3px; border-width: 1.5px; }
+body.compact .ogroup:hover { transform: translateY(-4px) scale(1.15); }
+body.compact .ogroup.pick::after { left: 6px; top: -10px; font-size: 13px; }
+body.compact .bubble, body.compact .seat.rside .bubble {
   left: 26px; right: auto; top: calc(100% + 6px); transform: none; font-size: 19px; padding: 1px 10px; border-width: 2px;
 }
-body.portrait .bubble.pass { font-size: 13px; padding: 3px 9px; }
-body.portrait .bubble::before, body.portrait .seat.rside .bubble::before {
+body.compact .bubble.pass { font-size: 13px; padding: 3px 9px; }
+body.compact .bubble::before, body.compact .seat.rside .bubble::before {
   left: 10px; right: auto; top: -9px; margin-top: 0; border: 7px solid transparent; border-top: 0; border-bottom-color: var(--wood);
 }
-body.portrait .bubble.pop { animation: popp .28s ease-out; }
+body.compact .bubble.pop { animation: popp .28s ease-out; }
 @keyframes popp { from { transform: scale(.3); opacity: 0; } }
-body.portrait .seat.spot::before {
+body.compact .seat.spot::before {
   top: -40px; width: 300px; height: 220px;
   background: radial-gradient(ellipse 140px 80px at 50% 90px,
     rgba(255,240,190,.55) 0%, rgba(255,236,170,.30) 40%, rgba(255,236,170,.10) 72%, rgba(255,236,170,0) 100%);
@@ -576,102 +576,102 @@ body.portrait .seat.spot::before {
 body.portrait #center { left: 240px; top: 300px; gap: 14px; }
 body.portrait #stage.o34 #center { top: 422px; }
 body.portrait #deck-count { top: calc(100% + 2px); font-size: 12px; padding: 1px 10px; }
-body.portrait #revealed .tname { font-size: 11px; top: calc(var(--mid-h) + 8px); }
-body.portrait #plaque { width: 186px; padding: 8px 10px; border-radius: 14px; }
-body.portrait #plaque .lbl { font-size: 10px; }
-body.portrait #plaque .amt { font-size: 38px; }
-body.portrait #plaque .who { font-size: 14px; }
-body.portrait #plaque hr { margin: 5px 0; }
-body.portrait #plaque .history { font-size: 11px; }
-body.portrait .pill { font-size: 12px; padding: 1px 8px; }
+body.compact #revealed .tname { font-size: 11px; top: calc(var(--mid-h) + 8px); }
+body.compact #plaque { width: 186px; padding: 8px 10px; border-radius: 14px; }
+body.compact #plaque .lbl { font-size: 10px; }
+body.compact #plaque .amt { font-size: 38px; }
+body.compact #plaque .who { font-size: 14px; }
+body.compact #plaque hr { margin: 5px 0; }
+body.compact #plaque .history { font-size: 11px; }
+body.compact .pill { font-size: 12px; padding: 1px 8px; }
 body.portrait #stage.p2 #center { top: 300px; gap: 84px; }
 body.portrait #stage.p2.o34 #center { top: 422px; }
-body.portrait #stage.p2 #pile-area { --mid-w: 72px; --mid-h: 108px; width: 150px; }
-body.portrait .tstack { left: calc(100% + 6px); top: 12px; width: 76px; height: 90px; }
-body.portrait .tstack .card { width: 40px; height: 60px; }
-body.portrait .tstack > .cnt { left: 24px; top: -10px; }
-body.portrait .tstack .lab { display: none; }
+body.compact #stage.p2 #pile-area { --mid-w: 72px; --mid-h: 108px; width: 150px; }
+body.compact .tstack { left: calc(100% + 6px); top: 12px; width: 76px; height: 90px; }
+body.compact .tstack .card { width: 40px; height: 60px; }
+body.compact .tstack > .cnt { left: 24px; top: -10px; }
+body.compact .tstack .lab { display: none; }
 
 /* Unten: Aktionsfeld, darüber Geld (links) und eigenes Schild (rechts), darüber die Tierkarten */
 body.portrait #actions { left: 240px; bottom: 10px; width: 460px; min-height: 120px; padding: 10px 12px 12px; }
-body.portrait #actions h4 { font-size: 18px; margin-bottom: 8px; }
-body.portrait #actions .hint { font-size: 14px; }
-body.portrait #actions .waiting { font-size: 17px; }
-body.portrait .btn { padding: 10px 16px; font-size: 18px; }
-body.portrait .btn.small { padding: 8px 12px; font-size: 16px; }
-body.portrait .btns.bidrow .btn { padding: 10px 12px; }
-body.portrait .btns.quick { margin-top: 10px; }
-body.portrait .btns.quick .btn { padding: 8px 10px; font-size: 15px; }
-body.portrait .bid-input { width: 92px; font-size: 26px; padding: 5px 4px; }
+body.compact #actions h4 { font-size: 18px; margin-bottom: 8px; }
+body.compact #actions .hint { font-size: 14px; }
+body.compact #actions .waiting { font-size: 17px; }
+body.compact .btn { padding: 10px 16px; font-size: 18px; }
+body.compact .btn.small { padding: 8px 12px; font-size: 16px; }
+body.compact .btns.bidrow .btn { padding: 10px 12px; }
+body.compact .btns.quick { margin-top: 10px; }
+body.compact .btns.quick .btn { padding: 8px 10px; font-size: 15px; }
+body.compact .bid-input { width: 92px; font-size: 26px; padding: 5px 4px; }
 body.portrait #wallet { left: 16px; width: 226px; height: 110px; }
-body.portrait .mstack > .cnt { left: 14px; top: -11px; min-width: 22px; height: 22px; font-size: 12px; }
-body.portrait .mstack .plus { font-size: 14px; padding: 1px 7px; }
-body.portrait .mstack:hover { transform: translateY(-6px); }
+body.compact .mstack > .cnt { left: 14px; top: -11px; min-width: 22px; height: 22px; font-size: 12px; }
+body.compact .mstack .plus { font-size: 14px; padding: 1px 7px; }
+body.compact .mstack:hover { transform: translateY(-6px); }
 body.portrait #me-plate { left: auto; right: 16px; transform: none; gap: 8px; max-width: 218px; align-items: flex-end; }
-body.portrait #me-plate .avatar-wrap { width: 50px; height: 50px; }
-body.portrait #me-plate .nameplate { padding: 3px 10px 5px; }
-body.portrait .chips { flex-wrap: wrap; gap: 4px; }
-body.portrait .chip { font-size: 13px; padding: 0 7px; }
-body.portrait .chip b { font-size: 15px; }
-body.portrait #me-plate .bubble { left: 10px; top: auto; bottom: calc(100% + 10px); }
-body.portrait #me-plate .bubble::before { top: auto; bottom: -9px; border: 7px solid transparent; border-bottom: 0; border-top-color: var(--wood); }
-body.portrait #me-plate.spot::before {
+body.compact #me-plate .avatar-wrap { width: 50px; height: 50px; }
+body.compact #me-plate .nameplate { padding: 3px 10px 5px; }
+body.compact .chips { flex-wrap: wrap; gap: 4px; }
+body.compact .chip { font-size: 13px; padding: 0 7px; }
+body.compact .chip b { font-size: 15px; }
+body.compact #me-plate .bubble { left: 10px; top: auto; bottom: calc(100% + 10px); }
+body.compact #me-plate .bubble::before { top: auto; bottom: -9px; border: 7px solid transparent; border-bottom: 0; border-top-color: var(--wood); }
+body.compact #me-plate.spot::before {
   width: 320px; height: 200px;
   background: radial-gradient(ellipse 150px 85px at 50% 50%,
     rgba(255,240,190,.5) 0%, rgba(255,236,170,.28) 40%, rgba(255,236,170,.09) 72%, rgba(255,236,170,0) 100%);
 }
 body.portrait #hand, body.portrait #stage.p2 #hand { left: 16px; right: auto; width: 448px; height: 130px; }
-body.portrait .hgroup > .cnt { left: -6px; top: -10px; min-width: 22px; height: 22px; font-size: 12px; }
-body.portrait .hgroup:hover { transform: translateY(-12px); }
-body.portrait .hgroup .name { left: 14px; top: -10px; font-size: 11px; padding: 0 6px; }
-body.portrait .hand-empty { left: 0; right: 0; bottom: 40px; text-align: center; font-size: 14px; }
+body.compact .hgroup > .cnt { left: -6px; top: -10px; min-width: 22px; height: 22px; font-size: 12px; }
+body.compact .hgroup:hover { transform: translateY(-12px); }
+body.compact .hgroup .name { left: 14px; top: -10px; font-size: 11px; padding: 0 6px; }
+body.compact .hand-empty { left: 0; right: 0; bottom: 40px; text-align: center; font-size: 14px; }
 body.portrait #offer-pile, body.portrait #stage.p2 #offer-pile { left: 20px; width: 440px; height: 124px; }
-body.portrait #stage.selecting #hand { visibility: hidden; }
-body.portrait #offer-pile .title { font-size: 12px; max-width: 440px; top: -4px; }
-body.portrait #stage.p2 #offer-pile .card { width: 64px !important; height: 96px !important; }
-body.portrait #offer-pile .empty-hint { top: 34px; font-size: 13px; }
+body.compact #stage.selecting #hand { visibility: hidden; }
+body.compact #offer-pile .title { font-size: 12px; max-width: 440px; top: -4px; }
+body.compact #stage.p2 #offer-pile .card { width: 64px !important; height: 96px !important; }
+body.compact #offer-pile .empty-hint { top: 34px; font-size: 13px; }
 
 /* Kuhhandel am Handy: Gegner-Karten klappen hinter der eigenen Karte auf (kleiner) */
-body.portrait .pop { width: 104px; height: 116px; margin-left: -52px; bottom: 24px; padding-top: 6px; border-width: 2px; }
-body.portrait .hgroup:hover .pop, body.portrait .hgroup.open .pop { transform: rotate(var(--ang)) translateY(-104px) scale(1); }
-body.portrait .pop .avatar { width: 32px; height: 32px; }
-body.portrait .pop .pn { font-size: 13px; }
-body.portrait .pop .pc { font-size: 12px; }
-body.portrait .pop .pc b { font-size: 15px; }
-body.portrait .pop .pa { font-size: 11px; white-space: nowrap; }
-body.portrait .pop.info { height: 90px; padding-top: 12px; }
+body.compact .pop { width: 104px; height: 116px; margin-left: -52px; bottom: 24px; padding-top: 6px; border-width: 2px; }
+body.compact .hgroup:hover .pop, body.compact .hgroup.open .pop { transform: rotate(var(--ang)) translateY(-104px) scale(1); }
+body.compact .pop .avatar { width: 32px; height: 32px; }
+body.compact .pop .pn { font-size: 13px; }
+body.compact .pop .pc { font-size: 12px; }
+body.compact .pop .pc b { font-size: 15px; }
+body.compact .pop .pa { font-size: 11px; white-space: nowrap; }
+body.compact .pop.info { height: 90px; padding-top: 12px; }
 
 /* Meldungen, Aufdecken, Banner, Menü */
 body.portrait #toasts, body.portrait #stage.p2 #toasts { left: 20px; right: 20px; top: 490px; width: auto; align-items: center; }
 body.portrait #stage.o34 #toasts { top: 600px; }
-body.portrait #stage.selecting #toasts { display: none; }
-body.portrait .toast:not(:nth-last-child(-n+2)) { display: none; }   /* hochkant höchstens zwei Meldungen */
-body.portrait .toast { font-size: 14px; max-width: 440px; padding: 4px 12px; text-align: center; }
+body.compact #stage.selecting #toasts { display: none; }
+body.compact .toast:not(:nth-last-child(-n+2)) { display: none; }   /* hochkant höchstens zwei Meldungen */
+body.compact .toast { font-size: 14px; max-width: 440px; padding: 4px 12px; text-align: center; }
 body.portrait .reveal { left: 240px; top: 150px; min-width: 0; width: 440px; padding: 12px 14px 14px; }
-body.portrait .reveal .rtitle { font-size: 26px; }
+body.compact .reveal .rtitle { font-size: 26px; }
 body.portrait .reveal .rrow { flex-direction: column; gap: 6px; }
 body.portrait .reveal .rmid { flex-direction: row; min-width: 0; gap: 14px; }
-body.portrait .reveal .rvs { font-size: 18px; }
-body.portrait .reveal .rcards { height: 92px; }
-body.portrait .reveal .rc { width: 52px; height: 78px; }
-body.portrait .reveal .rc + .rc { margin-left: -28px; }
-body.portrait .reveal .rsum { font-size: 32px; }
-body.portrait .reveal .rdelta { font-size: 38px; }
-body.portrait #banner { min-width: 380px; max-width: 440px; padding: 14px 20px; }
-body.portrait #banner .t { font-size: 30px; }
-body.portrait #banner .d { font-size: 16px; }
+body.compact .reveal .rvs { font-size: 18px; }
+body.compact .reveal .rcards { height: 92px; }
+body.compact .reveal .rc { width: 52px; height: 78px; }
+body.compact .reveal .rc + .rc { margin-left: -28px; }
+body.compact .reveal .rsum { font-size: 32px; }
+body.compact .reveal .rdelta { font-size: 38px; }
+body.compact #banner { min-width: 380px; max-width: 440px; padding: 14px 20px; }
+body.compact #banner .t { font-size: 30px; }
+body.compact #banner .d { font-size: 16px; }
 body.portrait #top-buttons { right: 16px; top: 8px; }
-body.portrait .round { height: 38px; min-width: 38px; }
+body.compact .round { height: 38px; min-width: 38px; }
 body.portrait #log { right: 16px; top: 16px; bottom: 16px; width: 380px; }
 
 /* ================================================================ Touch allgemein */
 html { -webkit-text-size-adjust: 100%; touch-action: manipulation; }
 body { -webkit-tap-highlight-color: transparent; }
 .hgroup.open { z-index: 60 !important; transform: translateY(-22px); }
-body.portrait .hgroup.open { transform: translateY(-12px); }
+body.compact .hgroup.open { transform: translateY(-12px); }
 .hgroup.open .pops { pointer-events: auto; }
 .hgroup.open .pop { transform: rotate(var(--ang)) translateY(-146px) scale(1); opacity: 1; transition-delay: var(--d); }
-body.portrait .hgroup.open .pop { transform: rotate(var(--ang)) translateY(-104px) scale(1); }
+body.compact .hgroup.open .pop { transform: rotate(var(--ang)) translateY(-104px) scale(1); }
 #stage:has(#hand .hgroup.open) #actions { opacity: .25; transition: opacity .15s; }
 /* ohne Maus bleibt ein angetippter Hover-Zustand sonst „kleben“ */
 @media (hover: none) {
@@ -694,5 +694,31 @@ body.portrait .hgroup.open .pop { transform: rotate(var(--ang)) translateY(-104p
   .logo-cards { height: 96px; margin-top: -40px; }
   .logo-cards img { width: 64px; }
 }
-.rotate-hint { display: none; margin: 10px 0 0; font-size: 13px; color: var(--ink-soft); }
-@media (hover: none) and (orientation: landscape) and (max-height: 520px) { .rotate-hint { display: block; } }
+
+/* ================================================================ Handy quer
+   Bühne 1040 breit, Höhe nach Seitenverhältnis. Gegner oben in einer Reihe, Stapel + Tafel in der Mitte,
+   unten links Geld und Schild, unten Mitte das Bedienfeld, unten rechts die eigenen Tiere. */
+body.phland { --opp-w: 44px; --opp-h: 66px; --mid-w: 88px; --mid-h: 132px; }
+body.phland #center, body.phland #stage.o34 #center, body.phland #stage.p2 #center, body.phland #stage.p2.o34 #center { left: 520px; top: 140px; }
+body.phland #center { gap: 14px; }
+body.phland #stage.p2 #center { gap: 84px; }
+body.phland #deck-count { left: auto; right: calc(100% + 8px); top: 50%; transform: translateY(-50%); font-size: 12px; padding: 1px 10px; }
+body.phland #actions { left: 520px; bottom: 10px; width: 464px; min-height: 110px; padding: 8px 12px 10px; }
+body.phland #wallet { left: 16px; bottom: 12px; width: 262px; height: 110px; }
+body.phland #me-plate { left: 16px; right: auto; bottom: 120px; transform: none; gap: 8px; max-width: 280px; align-items: flex-end; }
+body.phland #hand, body.phland #stage.p2 #hand { left: 760px; right: auto; bottom: 12px; width: 266px; height: 130px; }
+body.phland #offer-pile, body.phland #stage.p2 #offer-pile { left: 760px; bottom: 12px; width: 266px; height: 124px; }
+body.phland #offer-pile .title { max-width: 266px; }
+body.phland #toasts, body.phland #stage.p2 #toasts, body.phland #stage.o34 #toasts { left: auto; right: 16px; top: 150px; width: 300px; align-items: flex-end; }
+body.phland #stage.selecting #toasts { display: none; }
+body.phland .toast:not(:nth-last-child(-n+2)) { display: none; }
+body.phland .reveal { left: 520px; top: 24px; min-width: 0; width: 760px; padding: 12px 18px 14px; }
+body.phland .reveal .rside { min-width: 240px; }
+body.phland .reveal .rmid { min-width: 100px; }
+body.phland #top-buttons { right: 14px; top: 8px; }
+body.phland #log { right: 14px; top: 14px; bottom: 14px; width: 380px; }
+/* quer ist wenig Höhe: Summe steht schon über den gelegten Karten, Zusatzhinweis weglassen */
+body.phland #actions .sumline, body.phland #actions .hint.only { display: none; }
+body.phland #actions h4 { margin-bottom: 6px; }
+body.phland .btns.quick { margin-top: 6px; }
+body.compact #offer-pile .title .tip { display: none; }
