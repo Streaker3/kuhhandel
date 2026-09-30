@@ -804,8 +804,9 @@ function renderActions() {
     const context = au.high === null ? "Noch kein Gebot"
       : `Höchstgebot <b class="num">${au.amount}</b> · 👑 ${nameOf(au.high)}`;
     const redo = au.excluded.length ? `<div class="ctx redo">🔁 Wiederholung – ${au.excluded.map(nameOf).join(", ")} ausgeschlossen</div>` : "";
-    const quick = [["Min", min], ["+50", min + 40], ["+100", min + 90], ["Limit", V.cap]]
-      .filter(([, x], i, arr) => arr.findIndex(([, y]) => y === x) === i);
+    // Schnellwahl: Mindestgebot, 50 mehr, gesamtes Bargeld (ohne Bluff)
+    const allIn = Math.floor(P.cash / 10) * 10;
+    const quick = [["Min", min], ["+50", min + 40], ["Max", allIn]];
     box.innerHTML = `
       <h4>Dein Gebot für ${V.animals[au.card].name} <span class="ctx">· ${context}</span></h4>${redo}
       <div class="btns bidrow">
@@ -815,7 +816,8 @@ function renderActions() {
         <button class="btn primary" id="bgo" title="Enter">Bieten</button>
         <button class="btn danger" id="bpass" title="Esc">Passen</button>
       </div>
-      <div class="btns quick">${quick.map(([l, q]) => `<button class="btn small" data-q="${q}" ${q > V.cap ? "disabled" : ""}>${l} <b class="num">${q}</b></button>`).join("")}</div>
+      <div class="btns quick">${quick.map(([l, q]) => `<button class="btn small" data-q="${q}" ${q > V.cap || q < min ? "disabled" : ""}
+        title="${l === "Max" ? "Dein gesamtes Bargeld bieten" : ""}">${l} <b class="num">${q}</b></button>`).join("")}</div>
       <div class="hint" id="bhint"></div>`;
     const input = $("#bv");
     const valid = () => Number.isInteger(bidValue) && bidValue % 10 === 0 && bidValue >= min && bidValue <= V.cap;
