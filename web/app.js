@@ -118,9 +118,12 @@ function applyView(view, events) {
   since = Math.max(since, view.event_count);
   render();
   runFlights(flights);
-  if (prev && events.length < 25) quartetMoments(prev);
+  // Quartett-Moment und Scheinwerfer erst, wenn die Kuhhandel-Animation am Tisch vorbei ist
+  const afterTrade = Math.max(0, tradeAnimEnd - Date.now());
+  if (prev && events.length < 25) quartetMoments(prev, afterTrade);
   if (V.phase === "trade" && !V.trade && V.to_act !== null && V.to_act !== lastTurnP) {
-    if (prev && prev.phase === "trade") setTimeout(() => spotlightTurn(lastTurnP, V.to_act), 700);
+    const from = lastTurnP, to = V.to_act;
+    if (prev && prev.phase === "trade") setTimeout(() => spotlightTurn(from, to), Math.max(700, afterTrade + 200));
     lastTurnP = V.to_act;
   }
   if (focusP !== null && !(V.phase === "trade" && !V.trade && V.to_act === V.me)) unfocusSeat();
@@ -138,6 +141,7 @@ function scheduleBot(events) {
     delay += [2000, 1000, 0][speed];
     // eigenen Handel etwas länger stehen lassen, damit man das Ergebnis lesen kann
     if (trade.winner === V.me || trade.loser === V.me) delay = Math.max(delay, 3400);
+    if (speed !== 2) delay = Math.max(delay, tradeAnimEnd - Date.now() + 300);   // erst nach der Tisch-Animation weiter
   }
   botTimer = setTimeout(async () => accept(await api("/api/bot_step", {})), delay);
 }
@@ -506,6 +510,7 @@ function renderCenter() {
     ts.dataset.key = tkey;
     ts.innerHTML = cnt === null ? "" : Array.from({ length: Math.max(cnt, 0) }, (_, i) =>
       `<div class="card mback" style="left:${i * 6}px;top:${-i * 2}px;transform:rotate(${((i * 37) % 11) - 5}deg)"></div>`).join("")
+      + `<span class="cnt">×${cnt}</span>`
       + `<span class="lab">${cnt ? `${cnt} verdeckte Karte${cnt === 1 ? "" : "n"}` : "leerer Stapel"}${t.my_offer !== undefined ? ` · Wert ${t.my_offer}` : ""}</span>`;
     ts.title = cnt === null ? "" : `${cnt} verdeckte Geldkarte${cnt === 1 ? "" : "n"}`;
   }
@@ -792,6 +797,11 @@ function renderActions() {
     box.innerHTML = `<div class="waiting">Spiel beendet</div>`;
     return;
   }
+  if (mine && V.phase === "trade" && !V.trade && Date.now() < actionHoldUntil) {
+    box.classList.remove("mine");
+    box.innerHTML = `<div class="waiting">Gleich bist du dran<span class="dots"></span></div>`;
+    return;
+  }
   if (mine && V.phase === "auction" && Date.now() < Math.max(revealHoldUntil, actionHoldUntil)) {
     box.classList.remove("mine");
     box.innerHTML = `<div class="waiting">Nächste Karte wird aufgedeckt<span class="dots"></span></div>`;
@@ -1014,16 +1024,78 @@ function planFlights(prev, events) {
       }
     }
     if (ev.kind === "trade_result") {
+      // Ablauf am Tisch: (Gegengebot hinlegen) -> Geldstapel tauschen -> Tierkarten zum Gewinner
+      const cardsAt = planStackSwap(ev);
       const center = [...document.querySelectorAll("#revealed .tcard")];
       const froms = center.length ? center.map(cardGeom) : topCardGeoms(ev.loser, ev.animal, ev.k);
       froms.forEach((from, i) => out.push({ img: tierImg(prev.animals[ev.animal].key), from,
-        to: { p: ev.winner, animal: ev.animal }, delay: 250 + i * 120 }));
+        to: { p: ev.winner, animal: ev.animal }, delay: cardsAt + i * 120, hold: true }));
     }
   }
   return out;
 }
 
 /** Nach dem Neuzeichnen: Zielkarten verstecken und die Stellvertreter fliegen lassen. */
+let tradeAnimEnd = 0;   // bis wann die Kuhhandel-Animation am Tisch läuft
+
+/** Verdeckte Geldstapel beim Kuhhandel sichtbar bewegen. Gibt zurück, wann die Tierkarten losfliegen. */
+function planStackSwap(ev) {
+  if (FAST) return 250;
+  const k = speed === 2 ? 0.5 : 1;   // bei „Schnell“ halb so lang, damit sich Handel nicht überlappen
+  const s = stageScale();
+  const onTable = [...document.querySelectorAll("#tstack .card")].map(cardGeom);
+  const small = (r) => (r ? rectGeom(r, 40 * s, 60 * s) : null);
+  const money = (p) => small(moneyRect(p));
+  const ts = $("#tstack").getBoundingClientRect();
+  const make = (from, count, withBadge) => {
+    const c = el("div", "card fly mback");
+    Object.assign(c.style, { left: `${from.cx - from.w / 2}px`, top: `${from.cy - from.h / 2}px`, width: `${from.w}px`, height: `${from.h}px`, transform: `rotate(${from.rot}deg)` });
+    if (withBadge) c.appendChild(el("span", "cnt", `×${count}`));
+    document.body.appendChild(c);
+    return { el: c, from };
+  };
+  const move = (c, to, at, remove) => setTimeout(() => {
+    c.el.style.transform = `translate(${to.cx - c.from.cx}px, ${to.cy - c.from.cy}px) scale(${to.w / c.from.w}, ${to.h / c.from.h}) rotate(${to.rot}deg)`;
+    if (remove) setTimeout(() => { c.el.style.transition = "opacity .25s"; c.el.style.opacity = "0"; setTimeout(() => c.el.remove(), 270); }, FLY_MS);
+  }, at);
+  // Stapel des Herausforderers: liegt schon auf dem Tisch (Stellvertreter an derselben Stelle)
+  const offer = onTable.map((g, i) => make(g, ev.offer_count, i === onTable.length - 1));
+  const back = (p) => money(p);
+  const finish = (cardsAt) => {
+    tradeAnimEnd = Date.now() + cardsAt + FLY_MS + 400;
+    actionHoldUntil = tradeAnimEnd;          // eigener Zug erst, wenn der Tisch wieder ruhig ist
+    setTimeout(render, cardsAt + FLY_MS + 420);
+    const pl = $("#plaque");
+    pl.style.transition = "opacity .25s";
+    pl.style.opacity = "0";
+    setTimeout(() => { pl.style.opacity = ""; }, cardsAt + FLY_MS);
+    return cardsAt;
+  };
+  if (ev.accepted) {
+    // angenommen: der Stapel geht an den Herausgeforderten
+    const to = back(ev.target);
+    offer.forEach((c, i) => to && move(c, to, (700 + i * 60) * k, true));
+    return finish(1500 * k);
+  }
+  // Gegengebot: Stapel des Herausgeforderten kommt auf den Tisch, rechts neben den ersten
+  const n = Math.min(ev.counter_count, 8);
+  const src = back(ev.target);
+  const counter = [];
+  for (let i = 0; i < n && src; i++) {
+    const c = make(src, ev.counter_count, i === n - 1);
+    const to = { cx: ts.right + (40 + i * 6) * s, cy: ts.top + (48 - i * 2) * s, w: 64 * s, h: 96 * s, rot: ((i * 37) % 11) - 5 };
+    move(c, to, (150 + i * 70) * k, false);
+    c.from2 = to;
+    counter.push(c);
+  }
+  // nach einer kurzen Pause tauschen (bei Gleichstand nimmt jeder seinen Stapel zurück)
+  const SWAP = 1700 * k;
+  const offerTo = back(ev.tie ? ev.challenger : ev.target), counterTo = back(ev.tie ? ev.target : ev.challenger);
+  offer.forEach((c, i) => offerTo && move(c, offerTo, SWAP + i * 60 * k, true));
+  counter.forEach((c, i) => counterTo && move(c, counterTo, SWAP + (100 + i * 60) * k, true));
+  return finish(SWAP + 800 * k);
+}
+
 function runFlights(flights) {
   const taken = new Map(); // Gruppe -> bereits vergebene Zielkarten
   const pendingBadges = new Map();
@@ -1213,8 +1285,8 @@ function showReveal(ev, done) {
 }
 
 // --------------------------------------------------------------- Quartett-Momente
-function quartetMoments(prev) {
-  let delay = 900;
+function quartetMoments(prev, after = 0) {
+  let delay = Math.max(900, after + 150);
   for (let p = 0; p < V.n; p++) {
     const before = prev.players[p].animals, after = V.players[p].animals;
     for (let a = 0; a < after.length; a++) {

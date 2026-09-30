@@ -53,8 +53,8 @@ def player_view(g: Game, me: int, event_start: int = 0) -> dict:
         # Wer mit wem um welches Tier handelt, sieht jeder; Gebote nur die Beteiligten
         tv = {k: t[k] for k in ("challenger", "target", "animal", "k", "stage")}
         tv["involved"] = me in (t["challenger"], t["target"])
-        if t["offer"] is not None and tv["involved"]:
-            tv["offer_count"] = sum(t["offer"])
+        if t["offer"] is not None:
+            tv["offer_count"] = sum(t["offer"])   # Anzahl sieht jeder, den Wert nur der Herausforderer
             if me == t["challenger"]:
                 tv["my_offer"] = notes_value(t["offer"])
         view["trade"] = tv

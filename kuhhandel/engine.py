@@ -424,23 +424,26 @@ class Game:
         t["stage"] = "respond"
         cnt = sum(notes)
         word = "Schein" if cnt == 1 else "Scheine"
-        self._log(None, {
+        # Die Anzahl der Scheine sieht jeder am Tisch, den Wert nur der Herausforderer selbst
+        self._log(f"{self._sv(p, 'legt', 'legst')} verdeckt {cnt} {word} hin.", {
             p: f"Du legst verdeckt {cnt} {word} ({notes_value(notes)}).",
-            t["target"]: f"{self._sv(p, 'legt', 'legst')} verdeckt {cnt} {word} hin.",
-        }, kind="offer", count=cnt)
+        }, kind="offer", count=cnt, player=p)
 
     def _give_cards(self, winner, loser):
         t = self.trade
         self.animals[loser][t["animal"]] -= t["k"]
         self.animals[winner][t["animal"]] += t["k"]
 
-    def _close_trade(self, winner, loser, priv_msgs):
+    def _close_trade(self, winner, loser, priv_msgs, accepted=False, tie=False):
         t = self.trade
         self._give_cards(winner, loser)
         pub = (f"Kuhhandel: {self._sv(winner, 'bekommt', 'bekommst')} {t['k']}× {NAMES[t['animal']]} "
                f"von {self._dat(loser)}.")
+        # Für die Tisch-Animation: wie die (verdeckten) Stapel wandern – nur Anzahlen, keine Werte
         self._log(pub, priv_msgs, kind="trade_result", winner=winner, loser=loser,
-                  animal=t["animal"], k=t["k"])
+                  animal=t["animal"], k=t["k"], challenger=t["challenger"], target=t["target"],
+                  accepted=accepted, tie=tie, offer_count=sum(t["offer"]),
+                  counter_count=sum(t["counter"]) if t["counter"] is not None else 0)
         c, g = t["challenger"], t["target"]
         self.revealed_cash[c] = None
         self.revealed_cash[g] = None
@@ -471,7 +474,7 @@ class Game:
         self._log(None, {g: ""}, kind="reveal_bids", accepted=True, challenger=c, target=g,
                   offer=list(t["offer"]), counter=None)
         base = f"{self._sv(g, 'nimmt', 'nimmst')} an. {self._sv(c, 'bekommt', 'bekommst')} {t['k']}× {NAMES[t['animal']]}"
-        self._close_trade(c, g, {c: f"{base} und zahlt {v}.", g: f"{base}; du erhältst {v}."})
+        self._close_trade(c, g, {c: f"{base} und zahlt {v}.", g: f"{base}; du erhältst {v}."}, accepted=True)
 
     def _do_counter(self, notes):
         t = self.trade
@@ -499,7 +502,7 @@ class Game:
             winner, loser = (c, g) if vo > vc else (g, c)
             detail = (f"Gebote: {self.names[c]} {vo}, {self.names[g]} {vc}. "
                       f"{self._sv(winner, 'gewinnt', 'gewinnst')} und {'zahlst' if self._du(winner) else 'zahlt'} die Differenz {abs(vo - vc)}.")
-        self._close_trade(winner, loser, {c: detail, g: detail})
+        self._close_trade(winner, loser, {c: detail, g: detail}, tie=(vo == vc))
 
     # ------------------------------------------------------------ observation
     def event_text(self, ev, viewer):

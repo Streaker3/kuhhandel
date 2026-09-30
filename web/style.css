@@ -192,6 +192,8 @@ button { font-family: inherit; cursor: pointer; }
 /* Verdeckter Geldstapel auf dem Tisch */
 .tstack { position: absolute; left: calc(100% + 18px); top: 20px; width: 110px; height: 140px; cursor: help; }
 .tstack .card { width: 64px; height: 96px; }
+.tstack > .cnt { left: 40px; top: -12px; z-index: 30; }
+.fly > .cnt { right: -8px; top: -10px; left: auto; }
 .tstack .lab { position: absolute; left: 0; right: 0; top: 108px; text-align: center; font-size: 13px; color: var(--paper);
   background: rgba(0,0,0,.45); border-radius: 99px; padding: 1px 8px; opacity: 0; transition: opacity .15s; white-space: nowrap; }
 .tstack:hover .lab { opacity: 1; }
