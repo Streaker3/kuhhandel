@@ -167,7 +167,7 @@
         const animal = N()[ev.card];
         // eigener Kauf (ersteigert oder per Vorkaufsrecht) oder eigener Verkauf als Versteigerer
         const key = KH.ANIMALS[ev.card][0];
-        if (ev.player === ME) data.deals.push({ type: "buy", animal, key, price: ev.amount, market: mp, vorkauf: ev.kind === "bought" });
+        if (ev.player === ME) data.deals.push({ type: "buy", animal, key, price: ev.amount, market: mp, vorkauf: ev.kind === "bought", from: g.names[auBefore.auctioneer] });
         else if (ev.kind === "sold" && auBefore.auctioneer === ME)
           data.deals.push({ type: "sell", animal, key, price: ev.amount, market: mp, who: g.names[ev.player] });
       }
@@ -207,15 +207,21 @@
   }
 
   /** Was ist zwischen zwei Messpunkten passiert – in Klartext. */
-  function describe(g, evs, before, after) {
+  function describe(g, evs, before, after, evStart = 0) {
     const nm = (p) => (p === ME ? "Du" : g.names[p]);
     const anim = (a) => N()[a];
     const main = evs.find((e) => e.kind === "trade_result") || evs.find((e) => ["sold", "bought", "free"].includes(e.kind))
       || evs.find((e) => e.kind === "bust") || evs.find((e) => e.kind === "donkey");
-    let title = "", detail = "", key = null;
+    let title = "", detail = "", key = null, sale = null, trade = null;
     if (main && main.kind === "trade_result") {
       const rb = evs.find((e) => e.kind === "reveal_bids");
       key = KH.ANIMALS[main.animal][0];
+      const rb0 = evs.find((e) => e.kind === "reveal_bids");
+      const cnt = (n) => (n ? n.reduce((a, b) => a + b, 0) : 0);
+      trade = { players: [main.challenger, main.target], c: main.challenger, t: main.target, k: main.k, key, animal: anim(main.animal),
+        cName: nm(main.challenger), tName: nm(main.target), winner: main.winner, tie: !!main.tie, accepted: !!(rb0 && rb0.accepted),
+        vo: rb0 ? KH.notesValue(rb0.offer) : null, oc: rb0 ? cnt(rb0.offer) : main.offer_count,
+        vc: rb0 && rb0.counter ? KH.notesValue(rb0.counter) : null, cc: rb0 && rb0.counter ? cnt(rb0.counter) : 0 };
       title = `${nm(main.challenger)} ⚔ ${nm(main.target)} um ${main.k}× ${anim(main.animal)}`;
       if (rb && rb.accepted) detail = `${nm(main.target)} nimmt ${KH.notesValue(rb.offer)} an – ${nm(main.winner)} ${main.winner === ME ? "bekommst" : "bekommt"} die Karten.`;
       else if (rb) {
@@ -227,9 +233,15 @@
       key = KH.ANIMALS[main.card][0];
       const how = main.kind === "bought" ? "kauft per Vorkaufsrecht" : main.kind === "free" ? "bekommt kostenlos" : "ersteigert";
       title = `${nm(main.player)} ${main.player === ME ? how.replace("kauft", "kaufst").replace("bekommt", "bekommst").replace("ersteigert", "ersteigerst") : how} ${anim(main.card)}`;
-      if (main.kind !== "free") {
-        detail = `für ${main.amount}`;
+      if (main.kind !== "free") detail = `für ${main.amount}`;
+      // Versteigerer: letzte Aufdeckung dieser Karte vor dem Verkauf
+      let seller = null;
+      for (let j = evStart + evs.indexOf(main); j >= 0; j--) {
+        const e = g.events[j];
+        if (e.kind === "reveal" && e.card === main.card) { seller = e.auctioneer; break; }
       }
+      sale = { buyer: main.player, seller, price: main.kind === "free" ? 0 : main.amount, key,
+        buyerName: nm(main.player), sellerName: seller === null ? "" : nm(seller) };
     } else if (main && main.kind === "bust") {
       title = `${nm(main.player)} ${main.player === ME ? "fliegst" : "fliegt"} auf`;
       detail = "Das Geld wird offengelegt, die Karte neu versteigert.";
@@ -244,7 +256,7 @@
         conseq.push(`${nm(p)} schließt das ${anim(a)}-Quartett – ${q} Quartett${q === 1 ? "" : "e"}, ${after.scores[p]} Punkte`);
       }
     }
-    return { title, detail, key, conseq };
+    return { title, detail, key, conseq, sale, trade };
   }
 
   /** Schlüsselmomente für mich: dort, wo meine Siegchance am stärksten und dauerhaft gesprungen ist. */
@@ -267,27 +279,12 @@
     return picked.map((c) => {
       const p0 = pts[c.i - 1], p1 = pts[c.i];
       const evs = g.events.slice(p0.ev ?? 0, p1.ev ?? 0);
-      const desc = snaps ? describe(g, evs, snaps[c.i - 1], snaps[c.i]) : { title: p1.label, detail: "", key: null, conseq: [] };
+      const desc = snaps ? describe(g, evs, snaps[c.i - 1], snaps[c.i], p0.ev ?? 0) : { title: p1.label, detail: "", key: null, conseq: [] };
       if (!desc.title) desc.title = p1.label;
-      return { i: c.i, d: c.d, ...desc, before: p0.all || null, after: p1.all || null, replay, skip: (p1.label || "").startsWith("⏭") };
+      // Replay nur für Kuhhändel – bei einer Versteigerung zeigt die Mini-Animation alles Nötige
+      return { i: c.i, d: c.d, ...desc, before: p0.all || null, after: p1.all || null,
+        replay: replay && !!desc.trade, skip: (p1.label || "").startsWith("⏭") };
     });
-  }
-
-  /** Ansichten für das Replay eines Moments: Stand davor und nach jedem Zug bis zum Moment. */
-  function replay(data, i) {
-    if (!canReplay(data) || i < 1 || i >= data.points.length) return { error: "Kein Replay" };
-    const g = restart(data);
-    const a0 = data.points[i - 1].act, a1 = data.points[i].act;
-    for (let a = 0; a < a0; a++) g.step(data.actions[a]);
-    const viewOf = (from) => ({ ...KH.playerView(g, ME, from), bot_turn: false });
-    const start = viewOf(g.events.length);
-    const steps = [];
-    for (let a = a0; a < a1; a++) {
-      const from = g.events.length;
-      g.step(data.actions[a]);
-      steps.push(viewOf(from));
-    }
-    return { start, steps };
   }
 
   /** Üblicher Netto-Preis je Karte im Kuhhandel (was der Gewinner im Schnitt zahlt). */
@@ -374,5 +371,5 @@
     };
   }
 
-  root.Coach = { fresh, before, after, summary, replay, marketPrice };
+  root.Coach = { fresh, before, after, summary, marketPrice };
 })(typeof self !== "undefined" ? self : this);

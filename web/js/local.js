@@ -88,11 +88,6 @@
         case "/api/stats":
           if (!st.game || st.game.phase !== "over" || !st.coach) return { error: "Keine Statistik" };
           return Coach.summary(st.coach, st.game);
-        case "/api/replay": {
-          // Stelle `moment` aus dem Rückblick: Ansichten vor und nach jedem Zug dieses Abschnitts
-          if (!st.game || st.game.phase !== "over" || !st.coach) return { error: "Kein Replay" };
-          return Coach.replay(st.coach, Number(body.moment));
-        }
         case "/api/takeover":
         case "/api/state":
           return view(since);

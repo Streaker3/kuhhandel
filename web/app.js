@@ -129,7 +129,7 @@ function scheduleBot(events) {
 }
 
 async function act(action) {
-  if (busy || REPLAY) return;
+  if (busy) return;
   busy = true;
   selectMode = null;
   selected = [0, 0, 0, 0, 0, 0];
@@ -847,7 +847,6 @@ let panelErr = null, panelErrUntil = 0;
 function renderActions() {
   keyHandler = null;
   const box = $("#actions");
-  if (REPLAY) { replayPanel(box); return; }
   const P = V.players[V.me];
   const mine = V.to_act === V.me && V.phase !== "over";
   box.classList.toggle("mine", mine);
@@ -1649,6 +1648,42 @@ function showResults() {
  *  Gemessen wird der Layout-Viewport, damit Zoomen oder die Handy-Tastatur nichts umwirft. */
 // --------------------------------------------------------------- Rückblick (Statistiken nach dem Spiel)
 const TURN_NUM = ["①", "②", "③", "④"];
+/** Weiche Kurve ohne Überschwingen (monotone kubische Interpolation); mid(k) = Punkt mitten im Abschnitt k→k+1. */
+function smoothPath(P) {
+  const n = P.length;
+  if (n < 2) return { d: n ? `M${P[0][0]},${P[0][1]}` : "", mid: () => (n ? P[0] : [0, 0]) };
+  const dx = [], dy = [], sl = [];
+  for (let k = 0; k < n - 1; k++) { dx.push(P[k + 1][0] - P[k][0]); dy.push(P[k + 1][1] - P[k][1]); sl.push(dy[k] / dx[k]); }
+  const m = [sl[0]];
+  for (let k = 1; k < n - 1; k++) m.push(sl[k - 1] * sl[k] <= 0 ? 0 : (sl[k - 1] + sl[k]) / 2);
+  m.push(sl[n - 2]);
+  for (let k = 0; k < n - 1; k++) {
+    if (sl[k] === 0) { m[k] = 0; m[k + 1] = 0; continue; }
+    const a = m[k] / sl[k], b = m[k + 1] / sl[k], h = a * a + b * b;
+    if (h > 9) { const t = 3 / Math.sqrt(h); m[k] = t * a * sl[k]; m[k + 1] = t * b * sl[k]; }
+  }
+  const seg = [];
+  let d = `M${P[0][0].toFixed(1)},${P[0][1].toFixed(1)}`;
+  for (let k = 0; k < n - 1; k++) {
+    const c1 = [P[k][0] + dx[k] / 3, P[k][1] + (m[k] * dx[k]) / 3], c2 = [P[k + 1][0] - dx[k] / 3, P[k + 1][1] - (m[k + 1] * dx[k]) / 3];
+    seg.push([P[k], c1, c2, P[k + 1]]);
+    d += `C${c1[0].toFixed(1)},${c1[1].toFixed(1)} ${c2[0].toFixed(1)},${c2[1].toFixed(1)} ${P[k + 1][0].toFixed(1)},${P[k + 1][1].toFixed(1)}`;
+  }
+  const mid = (k) => {
+    const [a, b, c, e] = seg[Math.max(0, Math.min(seg.length - 1, k))];
+    return [(a[0] + 3 * b[0] + 3 * c[0] + e[0]) / 8, (a[1] + 3 * b[1] + 3 * c[1] + e[1]) / 8];
+  };
+  return { d, mid };
+}
+/** Mini-Animation einer Versteigerung: Karte erscheint, Preis, Karte geht zum Käufer, Geld zum Versteigerer.
+ *  down = die Karte wandert nach unten (zu der unten genannten Person). */
+function auctionAnim({ key, price, top, bottom, down, cls = "" }) {
+  return `<div class="am-stage ${cls}" style="--dir:${down ? 1 : -1}">
+    <span class="who top">${top}</span><span class="who bot">${bottom}</span>
+    <div class="amc" style="background-image:url(${tierImg(key)})"></div>
+    <div class="amp num">${price}</div>
+    <div class="amm"><i></i><b class="num">${price}</b></div></div>`;
+}
 // feste Farbe je Sitz: du rot, Gegner blau, grün, lila, bernstein (farbenblind-tauglich geprüft)
 const SEAT_COLORS = ["#c8372d", "#2f6fbd", "#1b9e77", "#7b52c4", "#c07a0c"];
 const CH = { W: 600, H: 210, L: 38, R: 10, T: 12, B: 22 };
@@ -1657,7 +1692,7 @@ function winChart(S) {
   const n = S.points.length;
   const x = (i) => L + (n > 1 ? (i / (n - 1)) * (W - L - R) : 0);
   const y = (v) => T + (1 - v) * (H - T - B);
-  const path = (vals) => vals.map((v, i) => `${i ? "L" : "M"}${x(i).toFixed(1)},${y(v).toFixed(1)}`).join("");
+  const path = (vals) => smoothPath(vals.map((v, i) => [x(i), y(v)])).d;
   let g = "";
   for (const v of [0, 0.25, 0.5, 0.75, 1]) {
     g += `<line class="grid" x1="${L}" x2="${W - R}" y1="${y(v)}" y2="${y(v)}"/><text class="ax" x="${L - 6}" y="${y(v) + 4}" text-anchor="end">${v * 100}%</text>`;
@@ -1668,11 +1703,18 @@ function winChart(S) {
   g += `<text class="ax" x="${L}" y="${H - 4}">Spielbeginn</text><text class="ax" x="${W - R}" y="${H - 4}" text-anchor="end">Ende</text>`;
   // jeder Gegner in seiner Farbe, man selbst kräftig obendrauf
   const others = S.others ? S.others.map((vals, q) => (q === 0 ? "" : `<path class="opp" data-q="${q}" style="stroke:${SEAT_COLORS[q]}" d="${path(vals)}"/>`)).join("") : "";
+  // Nummer mitten im Wechsel (zwischen vorherigem und neuem Punkt), etwas über der Kurve, mit Strich zum Punkt
   const ms = S.moments || [];
-  const marks = ms.map((m, k) => `<g class="tm" data-m="${k}"><circle cx="${x(m.i)}" cy="${y(S.points[m.i])}" r="12"/>
-    <text x="${x(m.i)}" y="${y(S.points[m.i]) + 4.5}" text-anchor="middle">${k + 1}</text></g>`).join("");
+  const me = smoothPath(S.points.map((v, i) => [x(i), y(v)]));
+  const marks = ms.map((m, k) => {
+    const [mx, my] = me.mid(m.i - 1);
+    const top = Math.min(y(S.points[m.i - 1]), y(S.points[m.i]));
+    const by = Math.max(T + 12, top - 22);
+    return `<g class="tm" data-m="${k}"><line x1="${mx}" x2="${mx}" y1="${by + 12}" y2="${my}"/><circle class="tp" cx="${mx}" cy="${my}" r="3"/>
+      <circle cx="${mx}" cy="${by}" r="12"/><text x="${mx}" y="${by + 4.5}" text-anchor="middle">${k + 1}</text></g>`;
+  }).join("");
   return `<svg class="wchart" viewBox="0 0 ${W} ${H}" role="img" aria-label="Siegchance im Spielverlauf">
-    ${g}${others}<path class="me" style="stroke:${SEAT_COLORS[0]}" d="${path(S.points)}"/>
+    ${g}${others}<path class="me" style="stroke:${SEAT_COLORS[0]}" d="${me.d}"/>
     <line class="cross" x1="0" x2="0" y1="${T}" y2="${y(0)}" style="display:none"/><circle class="dot" r="5" style="display:none"/>${marks}</svg>`;
 }
 /** Karte mit Tierbild für einen auffälligen Kauf oder Verkauf. */
@@ -1681,7 +1723,8 @@ function dealCard(d) {
   const good = d.type === "buy" ? d.diff < 0 : d.diff > 0;
   const tag = d.type === "buy" ? (good ? "Schnäppchen" : "Zu teuer") : (good ? "Gut verkauft" : "Unter Wert");
   const what = d.type === "buy" ? (d.vorkauf ? "per Vorkaufsrecht gekauft" : "ersteigert") : `an ${d.who} verkauft`;
-  const img = d.key ? `<div class="dimg" style="background-image:url(${tierImg(d.key)})"></div>` : "";
+  // Kauf: Karte kommt zu dir (unten), Geld geht zum Versteigerer (oben); Verkauf: umgekehrt
+  const img = d.key ? auctionAnim({ key: d.key, price: d.price, top: d.type === "buy" ? (d.from || "") : d.who, bottom: "Du", down: d.type === "buy" }) : "";
   return `<div class="deal ${good ? "good" : "bad"}">${img}
     <div class="dtxt"><span class="tag">${tag}</span>
       <div class="dname">${d.animal} <small>${what}</small></div>
@@ -1753,7 +1796,9 @@ async function showStats() {
           .filter((o) => o.q === 0 || Math.abs(o.a - o.b) >= 0.05).sort((x, y) => (x.q === 0 ? -1 : y.q === 0 ? 1 : Math.abs(y.a - y.b) - Math.abs(x.a - x.b))).slice(0, 3) : [];
         return `<div class="moment ${m.d > 0 ? "up" : "down"}">
           <div class="mnum">${k + 1}</div>
-          ${m.key ? `<div class="mimg" style="background-image:url(${tierImg(m.key)})"></div>` : ""}
+          ${m.sale ? auctionAnim({ key: m.sale.key, price: m.sale.price, down: m.sale.buyer === 0,
+              top: m.sale.buyer === 0 ? m.sale.sellerName : m.sale.buyerName, bottom: m.sale.buyer === 0 ? "Du" : m.sale.sellerName, cls: "small" })
+            : m.key ? `<div class="mimg" style="background-image:url(${tierImg(m.key)})"></div>` : ""}
           <div class="mtxt"><b>${m.title || ""}</b>
             ${m.detail ? `<div>${m.detail}</div>` : ""}
             ${m.conseq.map((c) => `<div class="mcq">★ ${c}</div>`).join("")}
@@ -1813,7 +1858,7 @@ async function showStats() {
   ov.onclick = (e) => { if (e.target === ov) close(); };
   $("#stats-close").onclick = close;
   // Replay eines Schlüsselmoments: Karte oder Nummer in der Kurve antippen
-  const goReplay = (k) => { if (ms[k] && ms[k].replay) startReplay(S, k, ov); };
+  const goReplay = (k) => { if (ms[k] && ms[k].trade) showTradeReplay(S, k); };
   ov.querySelectorAll(".rp").forEach((b) => (b.onclick = () => goReplay(+b.dataset.m)));
   ov.querySelectorAll(".tm").forEach((g) => g.addEventListener("click", (e) => { e.stopPropagation(); goReplay(+g.dataset.m); }));
   // Ringe, Balken und Skalen laufen beim Sichtbarwerden auf ihren Wert
@@ -1859,67 +1904,76 @@ async function showStats() {
   svg.addEventListener("pointerdown", pick);
 }
 
-// --------------------------------------------------------------- Replay eines Schlüsselmoments am Spieltisch
-let REPLAY = null;
-const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-async function startReplay(S, k, statsOv) {
-  const m = S.moments[k];
-  const R = await Local.call("/api/replay", { moment: m.i });
-  if (!R || R.error) { toast("Replay nicht möglich."); return; }
-  const token = {};
-  if (!REPLAY) REPLAY = { final: V, since, log: $("#log-list").innerHTML };
-  REPLAY.token = token;
-  REPLAY.S = S; REPLAY.k = k; REPLAY.ov = statsOv;
-  statsOv.style.display = "none";
-  $("#overlay").classList.remove("show");
-  clearTimeout(botTimer);
-  // Tisch auf den Stand vor dem Moment setzen
-  since = R.start.event_count;
-  bidHistory = []; lastBubble = {}; selectMode = null; openGroup = null;
-  $("#seats").dataset.players = "";
-  $("#revealed").dataset.key = "";
-  V = R.start;
-  render();
-  await sleep(900);
-  for (const view of R.steps) {
-    if (REPLAY?.token !== token) return;
-    const evs = view.events.filter((e) => e.i >= since);
-    accept(view);
-    const mine = evs.some((e) => e.kind === "reveal_bids");
-    const trade = evs.some((e) => e.kind === "trade_result");
-    const sale = evs.some((e) => ["sold", "bought", "free", "bust"].includes(e.kind));
-    await sleep(mine ? 7600 : trade ? Math.max(2600, tradeAnimEnd - Date.now() + 500) : sale ? 2200 : 950);
-  }
-  if (REPLAY?.token === token) { REPLAY.done = true; renderActions(); }
-}
-function replayPanel(box) {
-  const { S, k } = REPLAY;
-  const m = S.moments[k];
+// --------------------------------------------------------------- Replay eines Kuhhandels (eigenes kleines Fenster)
+// Nur die zwei Händler: einer oben, einer unten (du immer unten). Karten in die Mitte, verdeckte Stapel,
+// Aufdecken, Differenz, dann wandern Geld und Karten – darunter, wie sich die Siegchancen verschoben haben.
+function showTradeReplay(S, k) {
+  const m = S.moments[k], T = m.trade;
+  if (!T) return;
+  const meIn = T.c === 0 || T.t === 0;
+  const bot = meIn ? 0 : T.c, top = bot === T.c ? T.t : T.c;      // wer unten/oben sitzt
+  const name = (p) => (p === 0 ? "Du" : S.names[p]);
+  const val = (p) => (p === T.c ? T.vo : T.vc), cnt = (p) => (p === T.c ? T.oc : T.cc);
+  const img = tierImg(T.key);
   const pc = (v) => (v > 0 && v < 0.01 ? "<1" : Math.round(v * 100));
+  const cards = (side) => Array.from({ length: T.k }, (_, i) => `<div class="trc ${side}" style="--i:${i};background-image:url(${img})"></div>`).join("");
+  const stack = (p, pos) => {
+    const n = Math.min(cnt(p), 8);
+    const backs = Array.from({ length: Math.max(n, 1) }, (_, i) => `<i style="left:${i * 7}px;transform:rotate(${((i * 37) % 11) - 5}deg)${n ? "" : ";opacity:.25"}"></i>`).join("");
+    return `<div class="trs ${pos}" data-p="${p}"><span class="backs" style="width:${26 + Math.max(n - 1, 0) * 7}px">${backs}</span>
+      <span class="trn">×${cnt(p)}</span><b class="trv num" data-v="${val(p) ?? 0}">?</b></div>`;
+  };
+  const diff = T.accepted ? `angenommen: ${T.vo}` : T.tie ? "Gleichstand" : `Differenz ${Math.abs(T.vo - T.vc)}`;
+  const res = T.winner === 0 ? `Du bekommst ${T.k}× ${T.animal}` : `${name(T.winner)} bekommt ${T.k}× ${T.animal}`;
   const bars = m.before && m.after ? S.names.map((nm, q) => `<div class="rpb${q === 0 ? " me" : ""}"><span class="rn">${q === 0 ? "Du" : nm}</span>
-      <span class="rbar"><i style="width:${m.before[q] * 100}%;background:${SEAT_COLORS[q]}" class="b0"></i><i style="width:${m.after[q] * 100}%;background:${SEAT_COLORS[q]}" class="b1"></i></span>
+      <span class="rbar"><i class="b0" style="width:${m.before[q] * 100}%;background:${SEAT_COLORS[q]}"></i><i class="b1" data-w="${m.after[q] * 100}" style="width:${m.before[q] * 100}%;background:${SEAT_COLORS[q]}"></i></span>
       <span class="rv">${pc(m.before[q])} → <b>${pc(m.after[q])} %</b></span></div>`).join("") : "";
-  box.classList.remove("mine");
-  box.innerHTML = `<h4>Replay · Moment ${k + 1}${REPLAY.done ? "" : '<span class="dots"></span>'}</h4>
-    <div class="rpt"><b>${m.title || ""}</b>${m.detail ? ` – ${m.detail}` : ""}</div>
-    ${m.conseq.map((c) => `<div class="rpc">★ ${c}</div>`).join("")}
+  const ov = el("div", "rules-ov trv-ov", `<div class="panel trv">
+    <h2>Moment ${k + 1}</h2>
+    <div class="trtitle">${T.c === 0 ? `Du forderst ${T.tName} heraus` : `${T.cName} fordert ${T.t === 0 ? "dich" : T.tName} heraus`}: <b>${T.k}× ${T.animal}</b></div>
+    <div class="tr-stage" style="--win:${T.winner === bot ? 1 : -1}">
+      <div class="trp top">${avatarHTML(top)}<b>${name(top)}</b>${top === T.c ? '<span class="role">fordert heraus</span>' : ""}</div>
+      <div class="trp bot">${avatarHTML(bot)}<b>${name(bot)}</b>${bot === T.c ? '<span class="role">fordert heraus</span>' : ""}</div>
+      <div class="trrow"><div class="trg">${cards("b")}</div><div class="trg">${cards("t")}</div></div>
+      ${stack(top, "top")}${stack(bot, "bot")}
+      <div class="trd num">${diff}</div>
+    </div>
+    <div class="trres">${res}${m.detail ? `<div class="muted">${m.detail}</div>` : ""}${m.conseq.map((c) => `<div class="mcq">★ ${c}</div>`).join("")}</div>
     <div class="rpbars">${bars}</div>
-    <div class="btns" style="margin-top:8px"><button class="btn small" id="rp-again">⟲ Nochmal</button><button class="btn primary small" id="rp-back">Zurück zum Rückblick</button></div>`;
-  $("#rp-again").onclick = () => startReplay(S, k, REPLAY.ov);
-  $("#rp-back").onclick = endReplay;
-}
-function endReplay() {
-  if (!REPLAY) return;
-  const R = REPLAY;
-  REPLAY = null;
-  document.querySelectorAll(".reveal, .fly").forEach((e) => e.remove());
-  V = R.final; since = R.since;
-  $("#log-list").innerHTML = R.log;
-  $("#seats").dataset.players = "";
-  $("#revealed").dataset.key = "";
-  $("#overlay").classList.add("show");   // Ergebnis liegt noch im Overlay – nicht neu aufbauen (kein zweites Konfetti)
-  render();
-  R.ov.style.display = "";
+    <div class="btns" style="margin-top:12px"><button class="btn small" id="tr-again">⟲ Nochmal</button><button class="btn primary small" id="tr-close">Schließen</button></div>
+  </div>`);
+  document.body.appendChild(ov);
+  const close = () => { ov.remove(); };
+  ov.onclick = (e) => { if (e.target === ov) close(); };
+  ov.querySelector("#tr-close").onclick = close;
+  ov.querySelector("#tr-again").onclick = () => { close(); showTradeReplay(S, k); };
+  // Ablauf
+  const st = ov.querySelector(".tr-stage");
+  const at = (ms, fn) => setTimeout(() => { if (ov.isConnected) fn(); }, ms);
+  const countUp = (el, to) => {
+    const t0 = performance.now();
+    const tick = (t) => { const f = Math.min(1, (t - t0) / 700); el.textContent = Math.round(to * f); if (f < 1 && ov.isConnected) requestAnimationFrame(tick); };
+    requestAnimationFrame(tick);
+  };
+  at(250, () => st.classList.add("s-cards"));
+  at(1100, () => st.querySelector(`.trs[data-p="${T.c}"]`).classList.add("in"));
+  at(1900, () => {
+    const g = st.querySelector(`.trs[data-p="${T.t}"]`);
+    if (!T.accepted) g.classList.add("in");
+    else { g.classList.add("acc"); g.querySelector(".trv").textContent = "nimmt an"; }
+  });
+  at(2900, () => st.querySelectorAll(".trs.in .trv").forEach((v) => { v.classList.add("on"); countUp(v, +v.dataset.v); }));
+  at(4000, () => st.classList.add("s-diff"));
+  at(5100, () => {
+    // Geld: Gegengebot -> Stapel tauschen (Gleichstand: jeder behält seinen), angenommen -> Stapel zum Herausgeforderten
+    if (T.accepted) st.querySelector(`.trs[data-p="${T.c}"]`).classList.add(T.c === top ? "to-bot" : "to-top");
+    else if (!T.tie) { st.querySelector(".trs.top").classList.add("to-bot"); st.querySelector(".trs.bot").classList.add("to-top"); }
+  });
+  at(5900, () => st.classList.add("s-win"));
+  at(6700, () => {
+    ov.querySelector(".trres").classList.add("on");
+    ov.querySelectorAll(".rpb .b1").forEach((b) => { b.style.width = `${b.dataset.w}%`; });
+  });
 }
 
 function fit() {

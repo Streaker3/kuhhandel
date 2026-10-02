@@ -906,3 +906,90 @@ body.compact #offer-pile .title .tip { display: none; }
 .rpb .rbar i { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 99px; }
 .rpb .rbar .b0 { opacity: .3; }
 .rpb .rv { width: 82px; text-align: right; white-space: nowrap; }
+
+/* ---- Kurve: Markierung mitten im Wechsel */
+.wchart .tm line { stroke: var(--wood); stroke-width: 1.5; }
+.wchart .tm .tp { fill: var(--wood); stroke: var(--paper); stroke-width: 1.5; }
+.wchart .me { stroke-width: 3; }
+
+/* ---- Mini-Animation einer Versteigerung (Endlosschleife) */
+.am-stage { position: relative; flex: none; width: 112px; height: 140px; border-radius: 10px; overflow: hidden;
+  background: radial-gradient(ellipse at 50% 45%, #1f7a3c, #0f4d24); box-shadow: inset 0 0 0 3px #5a2e17; }
+.am-stage.small { width: 84px; height: 112px; }
+.am-stage .who { position: absolute; left: 0; right: 0; text-align: center; font-size: 10px; font-weight: 600; color: rgba(247,239,220,.9);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding: 0 4px; }
+.am-stage .who.top { top: 4px; }
+.am-stage .who.bot { bottom: 4px; }
+.amc { position: absolute; left: 50%; top: 50%; width: 40px; height: 60px; margin: -36px 0 0 -20px; border-radius: 4px; background: center / cover;
+  box-shadow: 0 2px 6px rgba(0,0,0,.45); opacity: 0; animation: amCard 6s cubic-bezier(.3,.7,.2,1) infinite; }
+.am-stage.small .amc { width: 32px; height: 48px; margin: -30px 0 0 -16px; }
+@keyframes amCard {
+  0% { opacity: 0; transform: translateY(-14px) rotateY(90deg) scale(.8); }
+  10% { opacity: 1; transform: translateY(0) rotateY(0) scale(1); }
+  56% { opacity: 1; transform: translateY(0); }
+  72%, 100% { opacity: 0; transform: translateY(calc(var(--dir) * 70px)) scale(.9); }
+}
+.amp { position: absolute; left: 50%; top: calc(50% + 28px); transform: translateX(-50%) scale(.5); padding: 0 8px; border-radius: 99px;
+  background: var(--gold); color: var(--wood); border: 2px solid var(--wood); font-size: 14px; opacity: 0; animation: amPrice 6s ease-out infinite; }
+.am-stage.small .amp { top: calc(50% + 21px); font-size: 12px; }
+@keyframes amPrice { 0%, 16% { opacity: 0; transform: translateX(-50%) scale(.5); } 22% { opacity: 1; transform: translateX(-50%) scale(1.15); }
+  26%, 40% { opacity: 1; transform: translateX(-50%) scale(1); } 46%, 100% { opacity: 0; transform: translateX(-50%) scale(1); } }
+.amm { position: absolute; left: 50%; top: 50%; display: flex; align-items: center; gap: 4px; margin-top: -12px; opacity: 0; animation: amMoney 6s ease-in-out infinite; }
+.amm i { width: 16px; height: 24px; border-radius: 2px; background: url("assets/web/rueckseite_geld.webp") center / cover; box-shadow: 0 1px 3px rgba(0,0,0,.5); }
+.amm b { font-size: 13px; font-weight: 400; color: var(--paper); text-shadow: 0 1px 2px rgba(0,0,0,.7); }
+/* Geld wandert entgegen der Karte: vom Käufer zum Versteigerer */
+@keyframes amMoney {
+  0%, 40% { opacity: 0; transform: translate(-50%, calc(var(--dir) * 46px)); }
+  46% { opacity: 1; }
+  62% { opacity: 1; transform: translate(-50%, calc(var(--dir) * -46px)); }
+  70%, 100% { opacity: 0; transform: translate(-50%, calc(var(--dir) * -46px)); }
+}
+.panel.stats .deals { grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); }
+.panel.stats .deal { align-items: center; }
+@media (prefers-reduced-motion: reduce) { .amc, .amp, .amm { animation: none; opacity: 1; } .amm { display: none; } }
+
+/* ---- Replay eines Kuhhandels: zwei Spieler, oben und unten */
+.trv-ov { z-index: 1200; }
+.panel.trv { width: min(520px, 100%); padding: 18px 18px 20px; }
+.panel.trv h2 { font-family: "Lilita One"; font-weight: 400; margin: 0; color: var(--wood); font-size: 24px; }
+.trtitle { font-size: 15px; margin: 2px 0 10px; }
+.tr-stage { position: relative; height: 340px; border-radius: 14px; overflow: hidden;
+  background: radial-gradient(ellipse at 50% 45%, #1f7a3c, #0f4d24); box-shadow: inset 0 0 0 4px #5a2e17; }
+.trp { position: absolute; left: 50%; transform: translateX(-50%); display: flex; align-items: center; gap: 8px; color: var(--paper); white-space: nowrap; }
+.trp.top { top: 10px; }
+.trp.bot { bottom: 10px; }
+.trp .avatar { width: 34px; height: 34px; border-width: 2px; }
+.trp b { font-size: 15px; }
+.trp .role { font-size: 11px; background: var(--gold); color: var(--wood); border-radius: 99px; padding: 0 7px; font-weight: 700; }
+.trrow { position: absolute; left: 0; right: 0; top: 50%; transform: translateY(-50%); display: flex; justify-content: center; gap: 30px; }
+.trg { display: flex; }
+.trg .trc + .trc { margin-left: -22px; }
+.trc { width: 50px; height: 75px; border-radius: 5px; background: center / cover; box-shadow: 0 3px 8px rgba(0,0,0,.45); opacity: 0;
+  transition: transform .6s cubic-bezier(.3,.7,.2,1), opacity .4s; transition-delay: calc(var(--i) * .1s); }
+.trc.b { transform: translateY(150px); }
+.trc.t { transform: translateY(-150px); }
+.s-cards .trc { opacity: 1; transform: translateY(0) rotate(calc((var(--i) - .5) * 5deg)); }
+.s-win .trc { opacity: 0; transform: translateY(calc(var(--win) * 160px)); transition-delay: 0s; }
+.trs { position: absolute; left: 50%; display: flex; align-items: center; gap: 8px; opacity: 0;
+  transition: transform .7s cubic-bezier(.3,.7,.2,1), opacity .4s; }
+.trs.top { top: 58px; transform: translate(-50%, -40px); }
+.trs.bot { bottom: 58px; transform: translate(-50%, 40px); }
+.trs.in, .trs.acc { opacity: 1; transform: translate(-50%, 0); }
+.trs .backs { position: relative; height: 39px; }
+.trs .backs i { position: absolute; top: 0; width: 26px; height: 39px; border-radius: 3px; background: url("assets/web/rueckseite_geld.webp") center / cover; box-shadow: 0 1px 3px rgba(0,0,0,.5); }
+.trs .trn { font-family: "Lilita One"; font-size: 13px; color: var(--paper); background: rgba(0,0,0,.35); border-radius: 99px; padding: 0 7px; }
+.trs .trv { font-size: 22px; font-weight: 400; color: var(--gold); -webkit-text-stroke: 1px var(--wood); paint-order: stroke fill; opacity: .5; min-width: 30px; }
+.trs .trv.on { opacity: 1; }
+.trs.acc .backs, .trs.acc .trn { display: none; }
+.trs.acc .trv { font-family: "Fredoka"; font-size: 15px; -webkit-text-stroke: 0; color: var(--paper); opacity: 1; }
+.trs.to-bot { transform: translate(-50%, 185px); opacity: 0; transition: transform .8s cubic-bezier(.4,.1,.2,1), opacity .3s .6s; }
+.trs.to-top { transform: translate(-50%, -185px); opacity: 0; transition: transform .8s cubic-bezier(.4,.1,.2,1), opacity .3s .6s; }
+.trd { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%) scale(.5); z-index: 4; padding: 3px 14px; border-radius: 99px;
+  background: var(--gold); color: var(--wood); border: 2px solid var(--wood); font-size: 20px; white-space: nowrap; opacity: 0; transition: transform .35s cubic-bezier(.2,.9,.3,1.3), opacity .25s; }
+.s-diff .trd { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+.s-win .trd { opacity: 0; }
+.trres { margin-top: 10px; font-size: 15px; font-weight: 600; opacity: .25; transition: opacity .4s; }
+.trres.on { opacity: 1; }
+.trres .mcq { color: var(--wood); }
+.panel.trv .rpbars { margin-top: 8px; }
+.panel.trv .rpb .b1 { transition: width 1s cubic-bezier(.3,.7,.2,1); }
