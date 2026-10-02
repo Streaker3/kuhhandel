@@ -50,9 +50,11 @@
 
   /** Rückblick mitschreiben – darf das Spiel nie aufhalten oder kaputt machen. */
   const auInfo = (g) => (g.auction ? { auctioneer: g.auction.auctioneer, card: g.auction.card } : null);
-  async function coachStep(g, fn, opts) {
+  /** Einen Zug ausführen und für den Rückblick mitschreiben (Zugliste fürs Replay, Siegchancen, Preise). */
+  async function coachStep(g, action, opts) {
     const au = auInfo(g), ev0 = g.events.length;
-    fn();
+    g.step(action);
+    if (st.coach.actions) st.coach.actions.push(action);
     try { await Coach.after(st.coach, g, au, ev0, opts); } catch (e) { /* ohne Rückblick weiter */ }
   }
 
@@ -78,7 +80,7 @@
           st.level = body.level || "schwer";
           st.game = new KH.Game(n, { names: [body.name || "Du", ...BOT_NAMES.slice(0, n - 1)] });
           st.bots = await makeBots(n);
-          st.coach = Coach.fresh();
+          st.coach = Coach.fresh(JSON.parse(JSON.stringify(st.game.toJSON())));   // Startzustand: daraus lässt sich jede Stelle nachspielen
           try { await Coach.after(st.coach, st.game, null, 0); } catch (e) { /* egal */ }
           save();
           return view(0);
@@ -86,6 +88,11 @@
         case "/api/stats":
           if (!st.game || st.game.phase !== "over" || !st.coach) return { error: "Keine Statistik" };
           return Coach.summary(st.coach, st.game);
+        case "/api/replay": {
+          // Stelle `moment` aus dem Rückblick: Ansichten vor und nach jedem Zug dieses Abschnitts
+          if (!st.game || st.game.phase !== "over" || !st.coach) return { error: "Kein Replay" };
+          return Coach.replay(st.coach, Number(body.moment));
+        }
         case "/api/takeover":
         case "/api/state":
           return view(since);
@@ -96,7 +103,7 @@
           const action = parseAction(body.action);
           const nDec = st.coach.decisions.length;
           try { await Coach.before(st.coach, g, action); } catch (e) { /* egal */ }
-          try { await coachStep(g, () => g.step(action)); } catch (e) {
+          try { await coachStep(g, action); } catch (e) {
             st.coach.decisions.length = nDec;   // abgelehnter Zug zählt nicht
             throw e;
           }
@@ -105,15 +112,14 @@
         }
         case "/api/bot_step": {
           const g = st.game;
-          if (g && g.toAct !== null && g.toAct !== HUMAN) { await coachStep(g, () => g.step(st.bots[g.toAct].act(g))); save(); }
+          if (g && g.toAct !== null && g.toAct !== HUMAN) { await coachStep(g, st.bots[g.toAct].act(g)); save(); }
           return view(since);
         }
         case "/api/skip_auction": {
-          // Test-Hilfe: Versteigerung automatisch zu Ende spielen (eigene Züge macht ein einfacher Bot)
           // eigene Züge macht die KI „Schwer“; die Siegchance wird nach jeder Karte festgehalten
           const g = st.game, standIn = new AI.NNBot(await AI.loadNet("schwer"));
           while (g.phase === "auction") {
-            await coachStep(g, () => g.step((g.toAct === HUMAN ? standIn : st.bots[g.toAct]).act(g)), { skip: true });
+            await coachStep(g, (g.toAct === HUMAN ? standIn : st.bots[g.toAct]).act(g), { skip: true });
           }
           save();
           return view(since);

@@ -874,3 +874,35 @@ body.compact #offer-pile .title .tip { display: none; }
   .hld { transform: translateX(-50%); }
   .hlm { transform: translateX(-50%); }
 }
+
+/* ---- Rückblick: Legende je Spieler, Schlüsselmomente, Replay */
+.panel.stats .legend { flex-wrap: wrap; gap: 4px 12px; }
+.panel.stats .legend .lg { display: inline-flex; align-items: center; gap: 5px; }
+.panel.stats .legend .lg .sw { margin-left: 0; width: 16px; height: 4px; }
+.panel.stats .legend .lg.me { font-weight: 700; color: var(--ink); }
+.panel.stats .legend .lg.me .sw { height: 5px; }
+.wchart .opp { opacity: .8; stroke-width: 1.7; }
+.wchart .tm { cursor: pointer; }
+.wchart .tm:hover circle { fill: var(--gold-dark); }
+.moments { display: flex; flex-direction: column; gap: 8px; margin: 6px 0; }
+.moment { display: flex; gap: 10px; align-items: flex-start; background: #fffaf0; border: 2px solid #e3d4b2; border-left-width: 6px; border-radius: 12px; padding: 8px 10px; }
+.moment.up { border-left-color: #2f8a46; }
+.moment.down { border-left-color: #b3342f; }
+.moment .mnum { flex: none; width: 26px; height: 26px; border-radius: 50%; background: var(--wood); color: #fff; font-weight: 700; display: grid; place-items: center; font-size: 14px; }
+.moment .mimg { flex: none; width: 40px; height: 60px; border-radius: 5px; background: center / cover; box-shadow: 0 1px 4px rgba(0,0,0,.3); }
+.moment .mtxt { min-width: 0; font-size: 14px; line-height: 1.4; }
+.moment .mcq { color: var(--wood); font-weight: 600; }
+.moment .mchips { display: flex; flex-wrap: wrap; gap: 4px; margin: 5px 0 2px; }
+.chipc { font-size: 12px; padding: 1px 8px; border-radius: 99px; border: 1.5px solid var(--c); color: var(--ink); background: #fff; }
+.chipc b { color: var(--c); }
+.moment .rp { margin-top: 6px; }
+#actions .rpt { font-size: 14px; line-height: 1.35; }
+#actions .rpc { font-size: 13px; color: var(--wood); font-weight: 600; }
+#actions .rpbars { margin-top: 6px; text-align: left; }
+.rpb { display: flex; align-items: center; gap: 6px; font-size: 12px; margin: 2px 0; }
+.rpb .rn { width: 58px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rpb.me .rn { font-weight: 700; }
+.rpb .rbar { position: relative; flex: 1; height: 8px; border-radius: 99px; background: #e8dcc0; overflow: hidden; }
+.rpb .rbar i { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 99px; }
+.rpb .rbar .b0 { opacity: .3; }
+.rpb .rv { width: 82px; text-align: right; white-space: nowrap; }

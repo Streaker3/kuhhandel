@@ -42,8 +42,9 @@
     return f % 2 === 0 ? f : f + 1;
   }
 
-  /** Scheine für eine Zahlung von mindestens `amount` ohne Wechselgeld (wie compose_payment). */
-  function composePayment(notes, amount) {
+  /** Scheine für eine Zahlung von mindestens `amount` ohne Wechselgeld (wie compose_payment).
+   *  fewest: bei Gleichstand möglichst wenige, also große Scheine (Bezahlen in der Versteigerung). */
+  function composePayment(notes, amount, fewest = false) {
     if (amount <= 0) return DENOMS.map(() => 0);
     if (notesValue(notes) < amount) return null;
     const totalUnits = Math.floor(notesValue(notes) / 10);
@@ -57,7 +58,7 @@
           if (t > totalUnits) continue;
           const cand = [cnt + 1, comp.slice()];
           cand[1][i] += 1;
-          if (!next.has(t) || next.get(t)[0] < cand[0]) next.set(t, cand);
+          if (!next.has(t) || (fewest ? next.get(t)[0] > cand[0] : next.get(t)[0] < cand[0])) next.set(t, cand);
         }
         dp = next;
       }
@@ -145,7 +146,7 @@
     }
     knownCash(viewer, p) { return viewer === p ? this.cashValue(p) : this.known[viewer][p]; }
     _pay(src, dst, amount) {
-      const notes = composePayment(this.cash[src], amount);
+      const notes = composePayment(this.cash[src], amount, true);   // große Scheine zuerst
       this._transferNotes(src, dst, notes);
       return notes;
     }

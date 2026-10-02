@@ -9,7 +9,9 @@
   const ME = 0;
   const N = () => KH.NAMES;
 
-  const fresh = () => ({ points: [], decisions: [], deals: [], trades: [], stats: { bids: 0, bluffs: 0, busts: 0, free: 0 }, skipped: false });
+  // init + actions: Startzustand und alle Züge – daraus lässt sich jede Stelle der Partie exakt nachspielen (Replay)
+  const fresh = (init = null) => ({ init, actions: [], points: [], decisions: [], deals: [], trades: [],
+    stats: { bids: 0, bluffs: 0, busts: 0, free: 0 }, skipped: false });
   const ensure = (d) => { d.trades = d.trades || []; d.stats = d.stats || { bids: 0, bluffs: 0, busts: 0, free: 0 }; return d; };
 
   let netP = null;
@@ -186,8 +188,106 @@
     all = all.map((x) => Math.round(x * 1000) / 1000);
     let label = marks.filter((e) => e.kind !== "phase" && e.kind !== "over").map(textOf).filter(Boolean).slice(0, 2).join(" ");
     if (skip) label = `⏭ (KI spielte für dich) ${label}`;
-    data.points.push({ v: all[ME], all, label, p2: g.phase !== "auction" });
+    data.points.push({ v: all[ME], all, label, p2: g.phase !== "auction", act: data.actions ? data.actions.length : undefined, ev: g.events.length });
     if (skip) data.skipped = true;
+  }
+
+  // ------------------------------------------------------------------ Schlüsselmomente & Replay
+  const canReplay = (data) => !!(data.init && data.actions && data.points.length && data.points.every((p) => p.act !== undefined));
+  const restart = (data) => KH.Game.fromJSON(JSON.parse(JSON.stringify(data.init)));
+
+  /** Spielstand (Tiere, Geld, Punkte) an jedem Messpunkt – durch Nachspielen der Züge. */
+  function snapshots(data) {
+    const g = restart(data);
+    let a = 0;
+    return data.points.map((pt) => {
+      while (a < pt.act) g.step(data.actions[a++]);
+      return { animals: g.animals.map((x) => x.slice()), scores: g.scores(), cash: Array.from({ length: g.n }, (_, p) => g.cashValue(p)) };
+    });
+  }
+
+  /** Was ist zwischen zwei Messpunkten passiert – in Klartext. */
+  function describe(g, evs, before, after) {
+    const nm = (p) => (p === ME ? "Du" : g.names[p]);
+    const anim = (a) => N()[a];
+    const main = evs.find((e) => e.kind === "trade_result") || evs.find((e) => ["sold", "bought", "free"].includes(e.kind))
+      || evs.find((e) => e.kind === "bust") || evs.find((e) => e.kind === "donkey");
+    let title = "", detail = "", key = null;
+    if (main && main.kind === "trade_result") {
+      const rb = evs.find((e) => e.kind === "reveal_bids");
+      key = KH.ANIMALS[main.animal][0];
+      title = `${nm(main.challenger)} ⚔ ${nm(main.target)} um ${main.k}× ${anim(main.animal)}`;
+      if (rb && rb.accepted) detail = `${nm(main.target)} nimmt ${KH.notesValue(rb.offer)} an – ${nm(main.winner)} ${main.winner === ME ? "bekommst" : "bekommt"} die Karten.`;
+      else if (rb) {
+        const vo = KH.notesValue(rb.offer), vc = KH.notesValue(rb.counter);
+        detail = `${nm(main.challenger)} ${vo} gegen ${nm(main.target)} ${vc} – ${vo === vc ? "Gleichstand, " : ""}${nm(main.winner)} ${main.winner === ME ? "gewinnst" : "gewinnt"}`
+          + (vo === vc ? "." : ` und ${main.winner === ME ? "zahlst" : "zahlt"} ${Math.abs(vo - vc)}.`);
+      }
+    } else if (main && (main.kind === "sold" || main.kind === "bought" || main.kind === "free")) {
+      key = KH.ANIMALS[main.card][0];
+      const how = main.kind === "bought" ? "kauft per Vorkaufsrecht" : main.kind === "free" ? "bekommt kostenlos" : "ersteigert";
+      title = `${nm(main.player)} ${main.player === ME ? how.replace("kauft", "kaufst").replace("bekommt", "bekommst").replace("ersteigert", "ersteigerst") : how} ${anim(main.card)}`;
+      if (main.kind !== "free") {
+        detail = `für ${main.amount}`;
+      }
+    } else if (main && main.kind === "bust") {
+      title = `${nm(main.player)} ${main.player === ME ? "fliegst" : "fliegt"} auf`;
+      detail = "Das Geld wird offengelegt, die Karte neu versteigert.";
+    } else if (main && main.kind === "donkey") {
+      title = "Esel-Bonus"; detail = `Alle bekommen ${main.amount}.`;
+    }
+    // Folgen: neue Quartette
+    const conseq = [];
+    for (let p = 0; p < g.n; p++) for (let a = 0; a < KH.NUM_ANIMALS; a++) {
+      if (after.animals[p][a] === 4 && before.animals[p][a] !== 4) {
+        const q = after.animals[p].filter((c) => c === 4).length;
+        conseq.push(`${nm(p)} schließt das ${anim(a)}-Quartett – ${q} Quartett${q === 1 ? "" : "e"}, ${after.scores[p]} Punkte`);
+      }
+    }
+    return { title, detail, key, conseq };
+  }
+
+  /** Schlüsselmomente für mich: dort, wo meine Siegchance am stärksten und dauerhaft gesprungen ist. */
+  function moments(data, g) {
+    const pts = data.points;
+    if (pts.length < 4) return [];
+    const v = (i) => pts[Math.max(0, Math.min(pts.length - 2, i))].v;
+    const cand = [];
+    for (let i = 1; i < pts.length - 1; i++) {
+      const raw = pts[i].v - pts[i - 1].v;
+      const smooth = (v(i) + v(i + 1)) / 2 - (v(i - 1) + v(i - 2)) / 2;   // hält die Änderung an?
+      if (Math.abs(raw) >= 0.06 && Math.sign(smooth) === Math.sign(raw) && Math.abs(smooth) >= 0.6 * Math.abs(raw)) cand.push({ i, d: raw });
+    }
+    cand.sort((a, b) => Math.abs(b.d) - Math.abs(a.d));
+    const picked = [];
+    for (const c of cand) if (picked.length < 4 && picked.every((q) => Math.abs(q.i - c.i) > 1)) picked.push(c);
+    picked.sort((a, b) => a.i - b.i);
+    const replay = canReplay(data);
+    const snaps = replay ? snapshots(data) : null;
+    return picked.map((c) => {
+      const p0 = pts[c.i - 1], p1 = pts[c.i];
+      const evs = g.events.slice(p0.ev ?? 0, p1.ev ?? 0);
+      const desc = snaps ? describe(g, evs, snaps[c.i - 1], snaps[c.i]) : { title: p1.label, detail: "", key: null, conseq: [] };
+      if (!desc.title) desc.title = p1.label;
+      return { i: c.i, d: c.d, ...desc, before: p0.all || null, after: p1.all || null, replay, skip: (p1.label || "").startsWith("⏭") };
+    });
+  }
+
+  /** Ansichten für das Replay eines Moments: Stand davor und nach jedem Zug bis zum Moment. */
+  function replay(data, i) {
+    if (!canReplay(data) || i < 1 || i >= data.points.length) return { error: "Kein Replay" };
+    const g = restart(data);
+    const a0 = data.points[i - 1].act, a1 = data.points[i].act;
+    for (let a = 0; a < a0; a++) g.step(data.actions[a]);
+    const viewOf = (from) => ({ ...KH.playerView(g, ME, from), bot_turn: false });
+    const start = viewOf(g.events.length);
+    const steps = [];
+    for (let a = a0; a < a1; a++) {
+      const from = g.events.length;
+      g.step(data.actions[a]);
+      steps.push(viewOf(from));
+    }
+    return { start, steps };
   }
 
   /** Üblicher Netto-Preis je Karte im Kuhhandel (was der Gewinner im Schnitt zahlt). */
@@ -232,8 +332,8 @@
       spent: buys.reduce((s, d) => s + d.price, 0), earned: sells.reduce((s, d) => s + d.price, 0),
       buyRatio: ratio(buys), sellRatio: ratio(sells),
       bids: data.stats.bids, bluffs: data.stats.bluffs, busts: data.stats.busts,
-      deals: all.filter((d) => Math.abs(d.diff) >= Math.max(20, 0.3 * d.market))
-        .sort((a, b) => Math.abs(b.diff) - Math.abs(a.diff)).slice(0, 3),
+      deals: all.filter((d) => Math.abs(d.diff) >= Math.max(20, 0.25 * d.market))
+        .sort((a, b) => Math.abs(b.diff) - Math.abs(a.diff)).slice(0, 6),
       notable: notableOf("auction", 2), agree: share("auction"),
     };
 
@@ -244,15 +344,17 @@
       const score = t.won ? (ref + t.net) / ref : (t.net - ref) / ref;
       return { ...t, ref: Math.round(ref), score };
     });
-    const hl = [];
-    const add = (t, kind) => { if (t && !hl.some((h) => h.t === t)) hl.push({ t, kind }); };
-    const byScore = tr.slice().sort((a, b) => b.score - a.score);
-    if (byScore[0] && byScore[0].score >= 0.3) add(byScore[0], byScore[0].won ? "bargain" : "sold");
-    const worst = byScore[byScore.length - 1];
-    if (worst && worst.score <= -0.3) add(worst, worst.won ? "ripoff" : "cheap");
-    const close = tr.filter((t) => !t.accepted && !t.tie && t.theirs !== null)
-      .sort((a, b) => Math.abs(a.mine - a.theirs) / Math.max(1, a.mine, a.theirs) - Math.abs(b.mine - b.theirs) / Math.max(1, b.mine, b.theirs))[0];
-    if (close && Math.abs(close.mine - close.theirs) <= Math.max(30, 0.1 * Math.max(close.mine, close.theirs))) add(close, close.won ? "closewin" : "closeloss");
+    // alle auffällig guten/schlechten Händel plus die knappen, höchstens 6
+    const kindOf = (t) => {
+      const close = !t.accepted && !t.tie && t.theirs !== null && t.mine !== null
+        && Math.abs(t.mine - t.theirs) <= Math.max(30, 0.1 * Math.max(t.mine, t.theirs));
+      if (t.score >= 0.3) return t.won ? "bargain" : "sold";
+      if (t.score <= -0.3) return t.won ? "ripoff" : "cheap";
+      if (close) return t.won ? "closewin" : "closeloss";
+      return null;
+    };
+    const hl = tr.map((t) => ({ t, kind: kindOf(t) })).filter((h) => h.kind)
+      .sort((a, b) => Math.abs(b.t.score) - Math.abs(a.t.score)).slice(0, 6);
     const trade = {
       n: tr.length, won: tr.filter((t) => t.won).length,
       paid: tr.filter((t) => t.net < 0).reduce((s, t) => s - t.net, 0),
@@ -265,12 +367,12 @@
     const p2At = pts.findIndex((p) => p.p2);
     return {
       points: pts.map((p) => p.v), labels: pts.map((p) => p.label), p2At,
-      turns: picked.sort((a, b) => a.i - b.i),
+      turns: picked.sort((a, b) => a.i - b.i), moments: moments(data, g),
       auction, trade, agree: share(),
       skipped: data.skipped, n: g.n, won: g.winner() === ME, names: g.names.slice(),
       others: pts.length && pts.every((p) => p.all) ? g.names.map((_, q) => pts.map((p) => p.all[q])) : null,
     };
   }
 
-  root.Coach = { fresh, before, after, summary, marketPrice };
+  root.Coach = { fresh, before, after, summary, replay, marketPrice };
 })(typeof self !== "undefined" ? self : this);

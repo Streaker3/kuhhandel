@@ -62,11 +62,12 @@ def bid_cap(cash: int) -> int:
     return (cash * 2 + 100) // 10 * 10
 
 
-def compose_payment(notes, amount: int):
+def compose_payment(notes, amount: int, fewest: bool = False):
     """Scheine für eine Zahlung von mindestens `amount` ohne Wechselgeld.
 
-    Minimale Überzahlung; bei Gleichstand möglichst viele Scheine (0er werden nie
-    zum Bezahlen verwendet). Gibt None zurück, wenn das Bargeld nicht reicht.
+    Minimale Überzahlung; bei Gleichstand möglichst viele Scheine – oder mit `fewest`
+    möglichst wenige, also große (so zahlt man in der Versteigerung: kleine Scheine bleiben
+    zum flexiblen Bieten). 0er werden nie zum Bezahlen verwendet. None, wenn das Bargeld nicht reicht.
     """
     if amount <= 0:
         return (0,) * len(DENOMS)
@@ -84,7 +85,7 @@ def compose_payment(notes, amount: int):
                 if t > total_units:
                     continue
                 cand = (cnt + 1, comp[:i] + (comp[i] + 1,) + comp[i + 1:])
-                if t not in new or new[t][0] < cand[0]:
+                if t not in new or (new[t][0] > cand[0] if fewest else new[t][0] < cand[0]):
                     new[t] = cand
             dp = new
     target = amount // 10 + (1 if amount % 10 else 0)
@@ -163,7 +164,7 @@ class Game:
         return self.cash_value(p) if viewer == p else self.known[viewer][p]
 
     def _pay(self, src: int, dst: int, amount: int):
-        notes = compose_payment(self.cash[src], amount)
+        notes = compose_payment(self.cash[src], amount, fewest=True)   # große Scheine zuerst
         assert notes is not None
         self._transfer_notes(src, dst, notes)
         return notes
