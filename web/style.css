@@ -892,20 +892,7 @@ body.compact #offer-pile .title .tip { display: none; }
 .moment .mimg { flex: none; width: 40px; height: 60px; border-radius: 5px; background: center / cover; box-shadow: 0 1px 4px rgba(0,0,0,.3); }
 .moment .mtxt { min-width: 0; font-size: 14px; line-height: 1.4; }
 .moment .mcq { color: var(--wood); font-weight: 600; }
-.moment .mchips { display: flex; flex-wrap: wrap; gap: 4px; margin: 5px 0 2px; }
-.chipc { font-size: 12px; padding: 1px 8px; border-radius: 99px; border: 1.5px solid var(--c); color: var(--ink); background: #fff; }
-.chipc b { color: var(--c); }
 .moment .rp { margin-top: 6px; }
-#actions .rpt { font-size: 14px; line-height: 1.35; }
-#actions .rpc { font-size: 13px; color: var(--wood); font-weight: 600; }
-#actions .rpbars { margin-top: 6px; text-align: left; }
-.rpb { display: flex; align-items: center; gap: 6px; font-size: 12px; margin: 2px 0; }
-.rpb .rn { width: 58px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.rpb.me .rn { font-weight: 700; }
-.rpb .rbar { position: relative; flex: 1; height: 8px; border-radius: 99px; background: #e8dcc0; overflow: hidden; }
-.rpb .rbar i { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 99px; }
-.rpb .rbar .b0 { opacity: .3; }
-.rpb .rv { width: 82px; text-align: right; white-space: nowrap; }
 
 /* ---- Kurve: Markierung mitten im Wechsel */
 .wchart .tm line { stroke: var(--wood); stroke-width: 1.5; }
@@ -991,5 +978,42 @@ body.compact #offer-pile .title .tip { display: none; }
 .trres { margin-top: 10px; font-size: 15px; font-weight: 600; opacity: .25; transition: opacity .4s; }
 .trres.on { opacity: 1; }
 .trres .mcq { color: var(--wood); }
-.panel.trv .rpbars { margin-top: 8px; }
-.panel.trv .rpb .b1 { transition: width 1s cubic-bezier(.3,.7,.2,1); }
+
+/* ---- Siegchance vorher/nachher als Balken */
+.crs { display: flex; flex-direction: column; gap: 4px; margin: 6px 0 2px; max-width: 360px; }
+.crs.big { max-width: none; margin-top: 10px; gap: 6px; }
+.crs .crh { font-size: 12px; text-transform: uppercase; letter-spacing: .8px; color: var(--ink-soft); font-weight: 600; }
+.cr { display: grid; grid-template-columns: 112px 1fr 40px; align-items: center; gap: 8px; font-size: 13px; }
+.crs.big .cr { grid-template-columns: 128px 1fr 44px; font-size: 14px; }
+.cr .cn { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.cr .cnm { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cr.me .cnm { font-weight: 700; }
+.cr .dl { flex: none; font-family: "Lilita One"; font-size: 12px; padding: 0 6px; border-radius: 99px; color: #fff; line-height: 17px; }
+.cr .dl.up { background: #2f8a46; }
+.cr .dl.down { background: #b3342f; }
+.cr .dl.eq { background: #b9a988; }
+.cr .cbar { position: relative; height: 10px; border-radius: 99px; background: #ece2c8; overflow: hidden; }
+.crs.big .cr .cbar { height: 12px; }
+.cr .cbar i { position: absolute; top: 0; bottom: 0; transition: width 1s cubic-bezier(.3,.7,.2,1); }
+.cr .cbar .base { left: 0; background: var(--c); opacity: .55; border-radius: 99px 0 0 99px; z-index: 2; }
+.cr .cbar .seg.gain { background: var(--c); filter: brightness(.62); z-index: 3; }      /* neu dazugekommen: dunkel */
+.cr .cbar .seg.loss { z-index: 1; opacity: .5;                                         /* verloren: blass gestreift */
+  background: repeating-linear-gradient(135deg, var(--c) 0 3px, transparent 3px 6px); }
+.cr .cv { text-align: right; font-weight: 400; font-size: 14px; }
+.cr.me .cv { color: var(--c); }
+
+/* ---- Replay: Einblendung am Ende */
+.trx { position: absolute; left: 50%; display: flex; align-items: center; gap: 6px; z-index: 6; pointer-events: none;
+  opacity: 0; transform: translateX(-50%) scale(.6); transition: opacity .3s, transform .4s cubic-bezier(.2,.9,.3,1.4); }
+.trx.top { top: 52px; }
+.trx.bot { bottom: 52px; }
+.s-pop .trx { opacity: 1; transform: translateX(-50%) scale(1); }
+.trx .mon { font-family: "Lilita One"; font-size: 26px; color: var(--paper); -webkit-text-stroke: 1.5px var(--wood); paint-order: stroke fill; }
+.trx .mon.good { color: #8fe0a0; }
+.trx .mon.bad { color: #ff8f84; }
+.trx .got { display: inline-flex; align-items: center; gap: 3px; font-family: "Lilita One"; font-size: 18px; color: var(--paper); }
+.trx .got i { width: 22px; height: 33px; border-radius: 3px; background: center / cover; box-shadow: 0 1px 4px rgba(0,0,0,.5); }
+.trx .stamp { font-family: "Lilita One"; font-size: 15px; padding: 2px 10px; border-radius: 8px; color: #fff; transform: rotate(-6deg);
+  border: 2px solid rgba(255,255,255,.85); box-shadow: 0 3px 8px rgba(0,0,0,.4); }
+.trx .stamp.good { background: #2f8a46; }
+.trx .stamp.bad { background: #b3342f; }

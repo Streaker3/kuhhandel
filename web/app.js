@@ -1648,33 +1648,28 @@ function showResults() {
  *  Gemessen wird der Layout-Viewport, damit Zoomen oder die Handy-Tastatur nichts umwirft. */
 // --------------------------------------------------------------- Rückblick (Statistiken nach dem Spiel)
 const TURN_NUM = ["①", "②", "③", "④"];
-/** Weiche Kurve ohne Überschwingen (monotone kubische Interpolation); mid(k) = Punkt mitten im Abschnitt k→k+1. */
-function smoothPath(P) {
-  const n = P.length;
-  if (n < 2) return { d: n ? `M${P[0][0]},${P[0][1]}` : "", mid: () => (n ? P[0] : [0, 0]) };
-  const dx = [], dy = [], sl = [];
-  for (let k = 0; k < n - 1; k++) { dx.push(P[k + 1][0] - P[k][0]); dy.push(P[k + 1][1] - P[k][1]); sl.push(dy[k] / dx[k]); }
-  const m = [sl[0]];
-  for (let k = 1; k < n - 1; k++) m.push(sl[k - 1] * sl[k] <= 0 ? 0 : (sl[k - 1] + sl[k]) / 2);
-  m.push(sl[n - 2]);
-  for (let k = 0; k < n - 1; k++) {
-    if (sl[k] === 0) { m[k] = 0; m[k + 1] = 0; continue; }
-    const a = m[k] / sl[k], b = m[k + 1] / sl[k], h = a * a + b * b;
-    if (h > 9) { const t = 3 / Math.sqrt(h); m[k] = t * a * sl[k]; m[k + 1] = t * b * sl[k]; }
-  }
-  const seg = [];
-  let d = `M${P[0][0].toFixed(1)},${P[0][1].toFixed(1)}`;
-  for (let k = 0; k < n - 1; k++) {
-    const c1 = [P[k][0] + dx[k] / 3, P[k][1] + (m[k] * dx[k]) / 3], c2 = [P[k + 1][0] - dx[k] / 3, P[k + 1][1] - (m[k + 1] * dx[k]) / 3];
-    seg.push([P[k], c1, c2, P[k + 1]]);
-    d += `C${c1[0].toFixed(1)},${c1[1].toFixed(1)} ${c2[0].toFixed(1)},${c2[1].toFixed(1)} ${P[k + 1][0].toFixed(1)},${P[k + 1][1].toFixed(1)}`;
-  }
+/** Kurve aus geraden Stücken; mid(k) = Punkt mitten im Abschnitt k→k+1. */
+function linePath(P) {
+  const d = P.map(([px, py], i) => `${i ? "L" : "M"}${px.toFixed(1)},${py.toFixed(1)}`).join("");
   const mid = (k) => {
-    const [a, b, c, e] = seg[Math.max(0, Math.min(seg.length - 1, k))];
-    return [(a[0] + 3 * b[0] + 3 * c[0] + e[0]) / 8, (a[1] + 3 * b[1] + 3 * c[1] + e[1]) / 8];
+    const a = P[Math.max(0, Math.min(P.length - 2, k))], b = P[Math.max(0, Math.min(P.length - 1, k + 1))];
+    return [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
   };
   return { d, mid };
 }
+/** Siegchance vorher/nachher als Balken: dazugewonnener Teil dunkel, verlorener Teil blass gestreift;
+ *  neben dem Namen ein farbiges Plus/Minus. animate: startet beim alten Wert (Übergang per JS). */
+function chanceRow(name, color, b, a, isMe, animate = false) {
+  const lo = Math.min(a, b), hi = Math.max(a, b), up = a > b;
+  const d = Math.round((a - b) * 100);
+  const badge = Math.abs(d) < 1 ? `<span class="dl eq">±0</span>` : `<span class="dl ${up ? "up" : "down"}">${up ? "+" : "−"}${Math.abs(d)}</span>`;
+  const segW = (hi - lo) * 100;
+  return `<div class="cr${isMe ? " me" : ""}" style="--c:${color}"><span class="cn"><span class="cnm">${name}</span>${badge}</span>
+    <span class="cbar"><i class="seg ${up ? "gain" : "loss"}" style="left:${lo * 100}%;width:${animate && up ? 0 : segW}%" data-w="${segW}"></i>
+      <i class="base" style="width:${(animate ? b : lo) * 100}%" data-w="${lo * 100}"></i></span>
+    <b class="cv num">${a > 0 && a < 0.01 ? "<1" : Math.round(a * 100)}%</b></div>`;
+}
+const growChances = (root) => root.querySelectorAll(".cr .base, .cr .seg").forEach((x) => { x.style.width = `${x.dataset.w}%`; });
 /** Mini-Animation einer Versteigerung: Karte erscheint, Preis, Karte geht zum Käufer, Geld zum Versteigerer.
  *  down = die Karte wandert nach unten (zu der unten genannten Person). */
 function auctionAnim({ key, price, top, bottom, down, cls = "" }) {
@@ -1692,7 +1687,7 @@ function winChart(S) {
   const n = S.points.length;
   const x = (i) => L + (n > 1 ? (i / (n - 1)) * (W - L - R) : 0);
   const y = (v) => T + (1 - v) * (H - T - B);
-  const path = (vals) => smoothPath(vals.map((v, i) => [x(i), y(v)])).d;
+  const path = (vals) => linePath(vals.map((v, i) => [x(i), y(v)])).d;
   let g = "";
   for (const v of [0, 0.25, 0.5, 0.75, 1]) {
     g += `<line class="grid" x1="${L}" x2="${W - R}" y1="${y(v)}" y2="${y(v)}"/><text class="ax" x="${L - 6}" y="${y(v) + 4}" text-anchor="end">${v * 100}%</text>`;
@@ -1705,7 +1700,7 @@ function winChart(S) {
   const others = S.others ? S.others.map((vals, q) => (q === 0 ? "" : `<path class="opp" data-q="${q}" style="stroke:${SEAT_COLORS[q]}" d="${path(vals)}"/>`)).join("") : "";
   // Nummer mitten im Wechsel (zwischen vorherigem und neuem Punkt), etwas über der Kurve, mit Strich zum Punkt
   const ms = S.moments || [];
-  const me = smoothPath(S.points.map((v, i) => [x(i), y(v)]));
+  const me = linePath(S.points.map((v, i) => [x(i), y(v)]));
   const marks = ms.map((m, k) => {
     const [mx, my] = me.mid(m.i - 1);
     const top = Math.min(y(S.points[m.i - 1]), y(S.points[m.i]));
@@ -1803,7 +1798,7 @@ async function showStats() {
             ${m.detail ? `<div>${m.detail}</div>` : ""}
             ${m.conseq.map((c) => `<div class="mcq">★ ${c}</div>`).join("")}
             ${m.skip ? `<div class="muted">beim Überspringen – die KI spielte für dich</div>` : ""}
-            <div class="mchips">${who.map((o) => `<span class="chipc" style="--c:${SEAT_COLORS[o.q]}">${o.q === 0 ? "Du" : o.nm} ${pc(o.b)} → <b>${pc(o.a)} %</b></span>`).join("")}</div>
+            <div class="crs">${who.map((o) => chanceRow(o.q === 0 ? "Du" : o.nm, SEAT_COLORS[o.q], o.b, o.a, o.q === 0)).join("")}</div>
             ${m.replay ? `<button class="btn small rp" data-m="${k}">▶ Replay ansehen</button>` : ""}
           </div></div>`;
       }).join("")}</div>`
@@ -1925,9 +1920,28 @@ function showTradeReplay(S, k) {
   };
   const diff = T.accepted ? `angenommen: ${T.vo}` : T.tie ? "Gleichstand" : `Differenz ${Math.abs(T.vo - T.vc)}`;
   const res = T.winner === 0 ? `Du bekommst ${T.k}× ${T.animal}` : `${name(T.winner)} bekommt ${T.k}× ${T.animal}`;
-  const bars = m.before && m.after ? S.names.map((nm, q) => `<div class="rpb${q === 0 ? " me" : ""}"><span class="rn">${q === 0 ? "Du" : nm}</span>
-      <span class="rbar"><i class="b0" style="width:${m.before[q] * 100}%;background:${SEAT_COLORS[q]}"></i><i class="b1" data-w="${m.after[q] * 100}" style="width:${m.before[q] * 100}%;background:${SEAT_COLORS[q]}"></i></span>
-      <span class="rv">${pc(m.before[q])} → <b>${pc(m.after[q])} %</b></span></div>`).join("") : "";
+  const bars = m.before && m.after ? `<div class="crs big"><div class="crh">Siegchancen</div>${S.names.map((nm, q) =>
+    chanceRow(q === 0 ? "Du" : nm, SEAT_COLORS[q], m.before[q], m.after[q], q === 0, true)).join("")}</div>` : "";
+  // Einblendung am Ende: Geld-Plus/-Minus je Spieler und ein Stempel, wenn es ein Schnäppchen oder zu teuer war
+  const net = (p) => {
+    if (T.accepted) return p === T.c ? -T.vo : T.vo;
+    if (T.tie) return 0;
+    return p === T.winner ? -Math.abs(T.vo - T.vc) : Math.abs(T.vo - T.vc);
+  };
+  const ai = KH.ANIMALS.findIndex((x) => x[0] === T.key);
+  const TM = self.TRADE_MARKET || {};
+  const ref = (TM[`${ai}-${S.n}`] || TM[`${ai}-x`] || 100) * T.k;
+  const verdict = (p) => {
+    const v = net(p);
+    if (p === T.winner) return -v <= 0.6 * ref ? ["Schnäppchen!", "good"] : -v >= 1.5 * ref ? ["Zu teuer!", "bad"] : null;
+    return v >= 1.5 * ref ? ["Gut verkauft!", "good"] : v <= 0.5 * ref ? ["Verschenkt!", "bad"] : null;
+  };
+  const pop = (p, pos) => {
+    const v = net(p), vd = verdict(p);
+    return `<div class="trx ${pos}"><span class="mon ${v > 0 ? "good" : v < 0 ? "bad" : ""}">${v > 0 ? "+" : v < 0 ? "−" : "±"}${Math.abs(v)}</span>
+      ${p === T.winner ? `<span class="got"><i style="background-image:url(${img})"></i>+${T.k}</span>` : ""}
+      ${vd ? `<span class="stamp ${vd[1]}">${vd[0]}</span>` : ""}</div>`;
+  };
   const ov = el("div", "rules-ov trv-ov", `<div class="panel trv">
     <h2>Moment ${k + 1}</h2>
     <div class="trtitle">${T.c === 0 ? `Du forderst ${T.tName} heraus` : `${T.cName} fordert ${T.t === 0 ? "dich" : T.tName} heraus`}: <b>${T.k}× ${T.animal}</b></div>
@@ -1937,9 +1951,10 @@ function showTradeReplay(S, k) {
       <div class="trrow"><div class="trg">${cards("b")}</div><div class="trg">${cards("t")}</div></div>
       ${stack(top, "top")}${stack(bot, "bot")}
       <div class="trd num">${diff}</div>
+      ${pop(top, "top")}${pop(bot, "bot")}
     </div>
     <div class="trres">${res}${m.detail ? `<div class="muted">${m.detail}</div>` : ""}${m.conseq.map((c) => `<div class="mcq">★ ${c}</div>`).join("")}</div>
-    <div class="rpbars">${bars}</div>
+    ${bars}
     <div class="btns" style="margin-top:12px"><button class="btn small" id="tr-again">⟲ Nochmal</button><button class="btn primary small" id="tr-close">Schließen</button></div>
   </div>`);
   document.body.appendChild(ov);
@@ -1970,9 +1985,10 @@ function showTradeReplay(S, k) {
     else if (!T.tie) { st.querySelector(".trs.top").classList.add("to-bot"); st.querySelector(".trs.bot").classList.add("to-top"); }
   });
   at(5900, () => st.classList.add("s-win"));
-  at(6700, () => {
+  at(6500, () => st.classList.add("s-pop"));
+  at(6900, () => {
     ov.querySelector(".trres").classList.add("on");
-    ov.querySelectorAll(".rpb .b1").forEach((b) => { b.style.width = `${b.dataset.w}%`; });
+    growChances(ov);
   });
 }
 
