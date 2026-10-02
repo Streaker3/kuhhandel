@@ -1657,19 +1657,21 @@ function linePath(P) {
   };
   return { d, mid };
 }
-/** Siegchance vorher/nachher als Balken: dazugewonnener Teil dunkel, verlorener Teil blass gestreift;
- *  neben dem Namen ein farbiges Plus/Minus. animate: startet beim alten Wert (Übergang per JS). */
+/** Siegchance vorher/nachher als Balken: Zugewinn als dunklere Fortsetzung, Verlust als gestrichelter Geisterbereich,
+ *  ein Strich markiert den alten Wert; neben dem Namen ein farbiges Plus/Minus. animate: startet beim alten Wert. */
 function chanceRow(name, color, b, a, isMe, animate = false) {
-  const lo = Math.min(a, b), hi = Math.max(a, b), up = a > b;
-  const d = Math.round((a - b) * 100);
+  const up = a > b, d = Math.round((a - b) * 100);
   const badge = Math.abs(d) < 1 ? `<span class="dl eq">±0</span>` : `<span class="dl ${up ? "up" : "down"}">${up ? "+" : "−"}${Math.abs(d)}</span>`;
-  const segW = (hi - lo) * 100;
+  const w = (v) => `${(v * 100).toFixed(1)}%`;
+  // gain: dunkler Balken wächst von alt auf neu, darüber der alte Teil; loss: Geist bis alt, darüber der Balken schrumpft auf neu
+  const bars = up
+    ? `<i class="gain" style="width:${animate ? w(b) : w(a)}" data-w="${(a * 100).toFixed(1)}"></i><i class="fill" style="width:${w(b)}" data-w="${(b * 100).toFixed(1)}"></i>`
+    : `<i class="ghost" style="width:${w(b)}"></i><i class="fill" style="width:${animate ? w(b) : w(a)}" data-w="${(a * 100).toFixed(1)}"></i>`;
   return `<div class="cr${isMe ? " me" : ""}" style="--c:${color}"><span class="cn"><span class="cnm">${name}</span>${badge}</span>
-    <span class="cbar"><i class="seg ${up ? "gain" : "loss"}" style="left:${lo * 100}%;width:${animate && up ? 0 : segW}%" data-w="${segW}"></i>
-      <i class="base" style="width:${(animate ? b : lo) * 100}%" data-w="${lo * 100}"></i></span>
+    <span class="cbar">${bars}<i class="tick" style="left:${w(b)}"></i></span>
     <b class="cv num">${a > 0 && a < 0.01 ? "<1" : Math.round(a * 100)}%</b></div>`;
 }
-const growChances = (root) => root.querySelectorAll(".cr .base, .cr .seg").forEach((x) => { x.style.width = `${x.dataset.w}%`; });
+const growChances = (root) => root.querySelectorAll(".cr .cbar i[data-w]").forEach((x) => { x.style.width = `${x.dataset.w}%`; });
 /** Mini-Animation einer Versteigerung: Karte erscheint, Preis, Karte geht zum Käufer, Geld zum Versteigerer.
  *  down = die Karte wandert nach unten (zu der unten genannten Person). */
 function auctionAnim({ key, price, top, bottom, down, cls = "" }) {
