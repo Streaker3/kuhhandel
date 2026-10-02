@@ -1791,7 +1791,7 @@ async function showStats() {
     ? `<div class="moments">${ms.map((m, k) => {
         const who = m.before && m.after ? S.names.map((nm, q) => ({ nm, q, b: m.before[q], a: m.after[q] }))
           .filter((o) => o.q === 0 || Math.abs(o.a - o.b) >= 0.05).sort((x, y) => (x.q === 0 ? -1 : y.q === 0 ? 1 : Math.abs(y.a - y.b) - Math.abs(x.a - x.b))).slice(0, 3) : [];
-        return `<div class="moment ${m.d > 0 ? "up" : "down"}">
+        return `<div class="moment ${m.d > 0 ? "m-up" : "m-down"}">
           <div class="mnum">${k + 1}</div>
           ${m.sale ? auctionAnim({ key: m.sale.key, price: m.sale.price, down: m.sale.buyer === 0,
               top: m.sale.buyer === 0 ? m.sale.sellerName : m.sale.buyerName, bottom: m.sale.buyer === 0 ? "Du" : m.sale.sellerName, cls: "small" })

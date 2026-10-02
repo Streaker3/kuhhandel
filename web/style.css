@@ -886,11 +886,11 @@ body.compact #offer-pile .title .tip { display: none; }
 .wchart .tm:hover circle { fill: var(--gold-dark); }
 .moments { display: flex; flex-direction: column; gap: 8px; margin: 6px 0; }
 .moment { display: flex; gap: 10px; align-items: flex-start; background: #fffaf0; border: 2px solid #e3d4b2; border-left-width: 6px; border-radius: 12px; padding: 8px 10px; }
-.moment.up { border-left-color: #2f8a46; }
-.moment.down { border-left-color: #b3342f; }
+.moment.m-up { border-left-color: #2f8a46; }
+.moment.m-down { border-left-color: #b3342f; }
 .moment .mnum { flex: none; width: 26px; height: 26px; border-radius: 50%; background: var(--wood); color: #fff; font-weight: 700; display: grid; place-items: center; font-size: 14px; }
 .moment .mimg { flex: none; width: 40px; height: 60px; border-radius: 5px; background: center / cover; box-shadow: 0 1px 4px rgba(0,0,0,.3); }
-.moment .mtxt { min-width: 0; font-size: 14px; line-height: 1.4; }
+.moment .mtxt { flex: 1; min-width: 0; font-size: 14px; line-height: 1.4; }
 .moment .mcq { color: var(--wood); font-weight: 600; }
 .moment .rp { margin-top: 6px; }
 
@@ -980,10 +980,10 @@ body.compact #offer-pile .title .tip { display: none; }
 .trres .mcq { color: var(--wood); }
 
 /* ---- Siegchance vorher/nachher als Balken */
-.crs { display: flex; flex-direction: column; gap: 4px; margin: 6px 0 2px; max-width: 360px; }
+.crs { display: flex; flex-direction: column; gap: 4px; margin: 6px 0 2px; width: 100%; max-width: 380px; }
 .crs.big { max-width: none; margin-top: 10px; gap: 6px; }
 .crs .crh { font-size: 12px; text-transform: uppercase; letter-spacing: .8px; color: var(--ink-soft); font-weight: 600; }
-.cr { display: grid; grid-template-columns: 112px 1fr 40px; align-items: center; gap: 8px; font-size: 13px; }
+.cr { display: grid; grid-template-columns: 112px minmax(80px, 1fr) 40px; align-items: center; gap: 8px; font-size: 13px; }
 .crs.big .cr { grid-template-columns: 128px 1fr 44px; font-size: 14px; }
 .cr .cn { display: flex; align-items: center; gap: 6px; min-width: 0; }
 .cr .cnm { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
