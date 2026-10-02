@@ -236,7 +236,7 @@ const LAYOUT = {
   },
   port: {
     name: "port", w: 480, h: 1040, frame: 16, handLeft: 16,
-    own: { w: 72, h: 108 }, own2: { w: 76, h: 114 }, opp: { w: 46, h: 69 }, oppDX: 6, rowStep: 46,
+    own: { w: 72, h: 108 }, own2: { w: 76, h: 114 }, opp: { w: 46, h: 69 }, oppDX: 6, rowStep: 40,
     wal: { w: 56, h: 84 }, mini: { w: 22, h: 33, dx: 3 }, ts: { w: 40, h: 60, dx: 24 }, offer: { w: 64, h: 96, p2: 64 },
     handW: [448, 448], handDX: 11, handDY: 5, handGap: [8, 12], walW: [226, 226], offerW: 440,
     seatWide: [448, 300], spotMin: [100, 76], popReach: 100, tStep: [20, 16],
@@ -386,6 +386,15 @@ function spotlightTurn(from, to) {
   setTimeout(() => dimAt(b.getBoundingClientRect()), a ? 120 : 0);
   dimTimer = setTimeout(() => { if (focusP === null) undim(); }, 1500);
 }
+
+// Handy: beim Bieten im Kuhhandel liegt das Gebot dort, wo sonst die Tiere sind – der Knopf zeigt kurz die Tiere
+let peekHand = false;
+$("#offer-pile").addEventListener("click", (e) => {
+  if (e.target.id !== "peek") return;
+  e.stopPropagation();
+  peekHand = !peekHand;
+  renderOfferPile();
+});
 
 // Maus über einer Tierkarte: alle Karten dieser Tierart am Tisch blau umranden
 if (!TOUCH) {
@@ -545,7 +554,7 @@ function renderCenter() {
     if (shown === null) rev.innerHTML = "";
     else if (t && V.phase === "trade") rev.innerHTML = tradeCardsHTML(t);
     else {
-      rev.innerHTML = `<div class="flip wait" data-a="${shown}"><div class="face b"></div><div class="face f" style="background-image:url(${tierImg(animalKey(shown))})"></div></div>`;
+      rev.innerHTML = `<div class="flip wait" data-a="${shown}"><div class="face b"></div><div class="face f"><img src="${tierImg(animalKey(shown))}" alt=""></div></div>`;
       spotlightCard(rev.querySelector(".flip"));
     }
   }
@@ -676,11 +685,14 @@ function renderOfferPile() {
   const box = $("#offer-pile");
   box.classList.toggle("show", !!selectMode);
   $("#stage").classList.toggle("selecting", !!selectMode);   // hochkant: Gebot liegt dort, wo sonst die Tierkarten sind
+  if (!selectMode) peekHand = false;
+  $("#stage").classList.toggle("peek", peekHand);
   if (!selectMode) { box.innerHTML = ""; return; }
   const list = [];
   selected.forEach((c, i) => { for (let k = 0; k < c; k++) list.push(i); });
   const sum = list.reduce((s, i) => s + V.denoms[i], 0);
-  box.innerHTML = `<span class="title">${selectMode === "offer" ? "Dein Gebot" : "Dein Gegengebot"}: ${list.length} Karte${list.length === 1 ? "" : "n"} · Wert <b>${sum}</b> <span class="tip" style="opacity:.75">(Karte ${TOUCH ? "antippen" : "anklicken"} = zurücklegen)</span></span>`;
+  const peek = `<button class="peekbtn" id="peek">${peekHand ? "💰 Mein Gebot" : "🐄 Meine Tiere"}</button>`;
+  box.innerHTML = peek + `<span class="title">${selectMode === "offer" ? "Dein Gebot" : "Dein Gegengebot"}: ${list.length} Karte${list.length === 1 ? "" : "n"} · Wert <b>${sum}</b> <span class="tip" style="opacity:.75">(Karte ${TOUCH ? "antippen" : "anklicken"} = zurücklegen)</span></span>`;
   if (!list.length) {
     box.innerHTML += `<div class="empty-hint">⬇ ${TOUCH ? "Tippe" : "Klicke"} unten auf deine Geldstapel, um Karten hierher zu legen.</div>`;
     return;
@@ -914,7 +926,7 @@ function renderActions() {
     clearTimeout(autoPassTimer);
     autoPassTimer = setTimeout(() => {
       if (autoPassKey === animalKeyNow() && V.to_act === V.me && V.auction && V.auction.stage === "bidding") act({ kind: "pass" });
-    }, 700);
+    }, 1500);   // genug Zeit für „Doch mitbieten“
     return;
   }
   if (V.phase === "auction" && au.stage === "bidding") {
@@ -1367,10 +1379,11 @@ function showReveal(ev, done) {
     </div>`;
   $("#stage").appendChild(box);
   const cards = [...box.querySelectorAll(".rc.opp")];
-  cards.forEach((c, i) => { c.querySelector(".rfront").style.backgroundImage = `url(${geldImg(oppCards[i])})`; });
+  // als <img>: Safari auf dem iPhone ignoriert bei 3D-gedrehten Karten die Hintergrund-Bildgröße
+  cards.forEach((c, i) => { c.querySelector(".rfront").innerHTML = `<img src="${geldImg(oppCards[i])}" alt="">`; });
   // eigene Karten liegen von Anfang an offen (man weiß ja, was man gelegt hat)
   [...box.querySelectorAll(".rc.mine")].forEach((c, i) => {
-    c.querySelector(".rfront").style.backgroundImage = `url(${geldImg(mine[i])})`;
+    c.querySelector(".rfront").innerHTML = `<img src="${geldImg(mine[i])}" alt="">`;
     c.classList.add("up", "still");
   });
   let shown = 0;
@@ -1710,7 +1723,7 @@ const growChances = (root) => root.querySelectorAll(".cr .cbar i[data-w]").forEa
 function auctionAnim({ key, price, top, bottom, down, cls = "" }) {
   return `<div class="am-stage ${cls}" style="--dir:${down ? 1 : -1}">
     <span class="who top">${top}</span><span class="who bot">${bottom}</span>
-    <div class="amc" style="background-image:url(${tierImg(key)})"></div>
+    <div class="amc"><img src="${tierImg(key)}" alt=""></div>
     <div class="amp num">${price}</div>
     <div class="amm"><i></i><b class="num">${price}</b></div></div>`;
 }
@@ -1966,10 +1979,14 @@ function openReplay(S, m, label = "Replay") {
  *  Zuschlag, dann wandert die Karte zum Käufer und das Geld zum Versteigerer. */
 function showAuctionReplay(S, m, label) {
   const A = m.sale;
-  const meIn = A.buyer === 0 || A.seller === 0;
-  const bot = meIn ? 0 : A.buyer, top = bot === A.buyer ? A.seller : A.buyer;
-  const name = (p) => (p === 0 ? "Du" : S.names[p]);
-  const role = (p) => (p === A.seller ? "versteigert" : p === A.buyer ? (A.how === "bought" ? "kauft selbst" : "bietet") : "");
+  // Wer bekommt das Geld? Normal der Versteigerer; beim Vorkaufsrecht der Höchstbietende (der Versteigerer kauft selbst)
+  const high = A.bids.length ? A.bids[A.bids.length - 1].p : null;
+  const payee = A.how === "bought" ? high : A.seller;
+  const meIn = A.buyer === 0 || payee === 0;
+  const bot = meIn ? 0 : A.buyer, top = A.how === "free" ? null : bot === A.buyer ? payee : A.buyer;
+  const name = (p) => (p === 0 ? "Du" : p === null ? "" : S.names[p]);
+  const role = (p) => (p === A.buyer ? (A.how === "bought" ? "Vorkaufsrecht" : A.how === "free" ? "versteigert" : "ersteigert")
+    : p === payee ? (A.how === "bought" ? "Höchstgebot" : "versteigert") : "");
   const bids = A.bids.slice(-8);
   const ticker = bids.map((b, i) => `<div class="tk" style="--c:${SEAT_COLORS[b.p]}" data-i="${i}"><span>${b.p === 0 ? "Du" : b.name}</span><b class="num">${b.amount}</b></div>`).join("")
     + A.busts.map((n) => `<div class="tk bust" data-i="${bids.length}">${n} fliegt auf!</div>`).join("");
@@ -1977,24 +1994,24 @@ function showAuctionReplay(S, m, label) {
     ? (A.price <= 0.75 * A.market ? ["Schnäppchen!", "good"] : A.price >= 1.3 * A.market ? ["Zu teuer!", "bad"] : null) : null;
   const pop = (p, pos) => {
     if (A.how === "free") return p === A.buyer ? `<div class="trx ${pos}"><span class="got"><i style="background-image:url(${tierImg(A.key)})"></i>+1</span><span class="stamp good">Geschenkt!</span></div>` : "";
-    const v = p === A.buyer ? -A.price : p === A.seller ? A.price : 0;
+    const v = p === A.buyer ? -A.price : p === payee ? A.price : 0;
     return `<div class="trx ${pos}"><span class="mon ${v > 0 ? "good" : "bad"}">${v > 0 ? "+" : "−"}${Math.abs(v)}</span>
       ${p === A.buyer ? `<span class="got"><i style="background-image:url(${tierImg(A.key)})"></i>+1</span>` : ""}
       ${p === A.buyer && verdict ? `<span class="stamp ${verdict[1]}">${verdict[0]}</span>` : ""}</div>`;
   };
-  const bars = m.before && m.after ? `<div class="crs big"><div class="crh">Siegchancen</div>${S.names.map((nm, q) =>
+  const bars = m.before && m.after ? `<div class="crs wide"><div class="crh">Siegchancen</div>${S.names.map((nm, q) =>
     chanceRow(q === 0 ? "Du" : nm, SEAT_COLORS[q], m.before[q], m.after[q], q === 0, true)).join("")}</div>` : "";
   const ov = el("div", "rules-ov trv-ov", `<div class="panel trv">
     <h2>${label}</h2>
     <div class="trtitle">${m.title}${A.market && A.how !== "free" ? ` <span class="muted">· üblich ≈ ${A.market}</span>` : ""}</div>
     <div class="tr-stage au-stage" style="--win:${A.buyer === bot ? 1 : -1}">
-      <div class="trp top">${avatarHTML(top)}<b>${name(top)}</b>${role(top) ? `<span class="role">${role(top)}</span>` : ""}</div>
+      ${top === null ? "" : `<div class="trp top">${avatarHTML(top)}<b>${name(top)}</b>${role(top) ? `<span class="role">${role(top)}</span>` : ""}</div>`}
       <div class="trp bot">${avatarHTML(bot)}<b>${name(bot)}</b>${role(bot) ? `<span class="role">${role(bot)}</span>` : ""}</div>
-      <div class="auc" style="background-image:url(${tierImg(A.key)})"></div>
+      <div class="auc"><img src="${tierImg(A.key)}" alt=""></div>
       <div class="ticker">${ticker}</div>
       <div class="trd num">${A.how === "free" ? "Niemand bietet" : A.how === "bought" ? `Vorkaufsrecht: ${A.price}` : `Zuschlag: ${A.price}`}</div>
       ${A.how === "free" ? "" : `<div class="aumoney"><i></i><b class="num">${A.price}</b></div>`}
-      ${pop(top, "top")}${pop(bot, "bot")}
+      ${top === null ? "" : pop(top, "top")}${pop(bot, "bot")}
     </div>
     <div class="trres">${m.conseq.map((c) => `<div class="mcq">★ ${c}</div>`).join("")}</div>
     ${bars}
@@ -2035,7 +2052,7 @@ function showTradeReplay(S, m, label) {
   };
   const diff = T.accepted ? `angenommen: ${T.vo}` : T.tie ? "Gleichstand" : `Differenz ${Math.abs(T.vo - T.vc)}`;
   const res = T.winner === 0 ? `Du bekommst ${T.k}× ${T.animal}` : `${name(T.winner)} bekommt ${T.k}× ${T.animal}`;
-  const bars = m.before && m.after ? `<div class="crs big"><div class="crh">Siegchancen</div>${S.names.map((nm, q) =>
+  const bars = m.before && m.after ? `<div class="crs wide"><div class="crh">Siegchancen</div>${S.names.map((nm, q) =>
     chanceRow(q === 0 ? "Du" : nm, SEAT_COLORS[q], m.before[q], m.after[q], q === 0, true)).join("")}</div>` : "";
   // Einblendung am Ende: Geld-Plus/-Minus je Spieler und ein Stempel, wenn es ein Schnäppchen oder zu teuer war
   const net = (p) => {
