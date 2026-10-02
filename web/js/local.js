@@ -94,8 +94,12 @@
           if (!g) return { error: "Kein Spiel" };
           if (g.toAct !== HUMAN) return { error: "Du bist nicht dran" };
           const action = parseAction(body.action);
+          const nDec = st.coach.decisions.length;
           try { await Coach.before(st.coach, g, action); } catch (e) { /* egal */ }
-          await coachStep(g, () => g.step(action));
+          try { await coachStep(g, () => g.step(action)); } catch (e) {
+            st.coach.decisions.length = nDec;   // abgelehnter Zug zählt nicht
+            throw e;
+          }
           save();
           return view(since);
         }
@@ -106,10 +110,11 @@
         }
         case "/api/skip_auction": {
           // Test-Hilfe: Versteigerung automatisch zu Ende spielen (eigene Züge macht ein einfacher Bot)
-          const g = st.game, standIn = new AI.HeuristicBot();
-          await coachStep(g, () => {
-            while (g.phase === "auction") g.step((g.toAct === HUMAN ? standIn : st.bots[g.toAct]).act(g));
-          }, { skip: true });
+          // eigene Züge macht die KI „Schwer“; die Siegchance wird nach jeder Karte festgehalten
+          const g = st.game, standIn = new AI.NNBot(await AI.loadNet("schwer"));
+          while (g.phase === "auction") {
+            await coachStep(g, () => g.step((g.toAct === HUMAN ? standIn : st.bots[g.toAct]).act(g)), { skip: true });
+          }
           save();
           return view(since);
         }

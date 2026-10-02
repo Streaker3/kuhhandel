@@ -737,15 +737,36 @@ body.compact #offer-pile .title .tip { display: none; }
 .wchart .fair { stroke: var(--ink-soft); stroke-width: 1; stroke-dasharray: 4 4; opacity: .7; }
 .wchart .fairt { opacity: .8; }
 .wchart .p2 { stroke: var(--wood); stroke-width: 1; stroke-dasharray: 2 4; opacity: .6; }
-.wchart .area { fill: rgba(184,134,11,.14); }
-.wchart .line { fill: none; stroke: #9a6b00; stroke-width: 2.2; stroke-linejoin: round; stroke-linecap: round; }
+.wchart .me { fill: none; stroke: #c8372d; stroke-width: 2.8; stroke-linejoin: round; stroke-linecap: round; }
+.wchart .opp { fill: none; stroke: #4f7fc0; stroke-width: 1.6; stroke-linejoin: round; opacity: .55; }
 .wchart .cross { stroke: var(--wood); stroke-width: 1; opacity: .5; }
-.wchart .dot { fill: #9a6b00; stroke: var(--paper); stroke-width: 2; }
+.wchart .dot { fill: #c8372d; stroke: var(--paper); stroke-width: 2; }
 .wchart .tm circle { stroke: var(--paper); stroke-width: 2; }
-.wchart .tm.up circle { fill: #2f8a46; }
-.wchart .tm.down circle { fill: #b3342f; }
+.wchart .tm circle { fill: var(--wood); }
 .wchart .tm text { fill: #fff; font-size: 13px; font-weight: 700; font-family: "Fredoka", sans-serif; pointer-events: none; }
-.panel.stats .cap { min-height: 20px; font-size: 13px; color: var(--ink); margin: 2px 0 4px; }
+.panel.stats .cap { min-height: 40px; font-size: 13px; color: var(--ink); margin: 2px 0 4px; line-height: 1.4; }
+.panel.stats .cap .me { color: #c8372d; font-weight: 700; }
+.panel.stats .legend { display: flex; align-items: center; gap: 6px; font-size: 13px; margin-top: 6px; color: var(--ink-soft); }
+.panel.stats .legend .sw { display: inline-block; width: 18px; height: 4px; border-radius: 2px; margin-left: 8px; }
+.panel.stats .legend .sw:first-child { margin-left: 0; }
+.panel.stats .legend .sw.me { background: #c8372d; }
+.panel.stats .legend .sw.opp { background: #4f7fc0; opacity: .7; }
+.panel.stats .deals { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 10px; margin: 6px 0; }
+.panel.stats .deal { display: flex; gap: 10px; align-items: center; background: #fffaf0; border: 2px solid #e3d4b2; border-radius: 12px; padding: 8px; }
+.panel.stats .deal.good { border-color: #8cc79a; }
+.panel.stats .deal.bad { border-color: #e5a29b; }
+.panel.stats .dimg { flex: none; width: 52px; height: 78px; border-radius: 6px; background: center / cover; box-shadow: 0 2px 6px rgba(0,0,0,.3); }
+.panel.stats .dtxt { min-width: 0; }
+.panel.stats .deal .tag { margin: 0 0 2px; }
+.panel.stats .deal.good .tag { background: #2f8a46; }
+.panel.stats .deal.bad .tag { background: #b3342f; }
+.panel.stats .dname { font-weight: 600; font-size: 15px; line-height: 1.2; }
+.panel.stats .dname small { display: block; font-weight: 400; font-size: 12px; color: var(--ink-soft); }
+.panel.stats .dprice .num { font-size: 22px; color: var(--ink); }
+.panel.stats .dprice .vs { font-size: 12px; color: var(--ink-soft); }
+.panel.stats .drel { font-size: 12px; font-weight: 600; }
+.panel.stats .deal.good .drel { color: #2f8a46; }
+.panel.stats .deal.bad .drel { color: #b3342f; }
 .panel.stats .turns { list-style: none; padding: 0; margin: 4px 0; }
 .panel.stats .turns li, .panel.stats .deals li, .panel.stats .notable li { font-size: 14px; line-height: 1.4; padding: 5px 0; border-bottom: 1.5px dashed #e3d4b2; }
 .panel.stats .turns b { display: inline-block; min-width: 72px; }

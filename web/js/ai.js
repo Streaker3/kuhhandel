@@ -128,7 +128,7 @@
       let pay = (composePayment(notes, target) || DENOMS.map(() => 0)).slice();
       if (notesValue(pay) > target * 1.4 + 50) pay = (composePayment(notes, Math.max(0, Math.floor(target / 2))) || DENOMS.map(() => 0)).slice();
       pay[0] = randint(0, notes[0]);
-      return pay;
+      return KH.atLeastOneCard(pay, notes);
     }
   }
 

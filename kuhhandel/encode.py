@@ -10,8 +10,8 @@ from __future__ import annotations
 
 import numpy as np
 
-from .engine import (DENOMS, NUM_ANIMALS, VALUES, Game, bid_cap, compose_payment,
-                     notes_value, stack_size)
+from .engine import (DENOMS, NUM_ANIMALS, VALUES, Game, at_least_one_card, bid_cap,
+                     compose_payment, notes_value, stack_size)
 
 MAX_SEATS = 5
 
@@ -36,7 +36,7 @@ def build_stack(notes, frac: float, zero_mode: int):
     pay = list(compose_payment(notes, target) or (0,) * len(DENOMS))
     z = notes[0]
     pay[0] = 0 if zero_mode == 0 else (z + 1) // 2 if zero_mode == 1 else z
-    return tuple(pay)
+    return at_least_one_card(pay, notes)
 
 
 def legal_mask(g: Game) -> np.ndarray:

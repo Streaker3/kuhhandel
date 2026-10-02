@@ -134,22 +134,28 @@
         if (mp === null) continue;
         const animal = N()[ev.card];
         // eigener Kauf (ersteigert oder per Vorkaufsrecht) oder eigener Verkauf als Versteigerer
-        if (ev.player === ME) data.deals.push({ type: "buy", animal, price: ev.amount, market: mp, ctx: `Karte ${cardNo(g)}` });
+        const key = KH.ANIMALS[ev.card][0];
+        if (ev.player === ME) data.deals.push({ type: "buy", animal, key, price: ev.amount, market: mp, vorkauf: ev.kind === "bought" });
         else if (ev.kind === "sold" && auBefore.auctioneer === ME)
-          data.deals.push({ type: "sell", animal, price: ev.amount, market: mp, ctx: `Karte ${cardNo(g)}`, who: g.names[ev.player] });
+          data.deals.push({ type: "sell", animal, key, price: ev.amount, market: mp, who: g.names[ev.player] });
       }
     }
     const marks = evs.filter((e) => ["sold", "bought", "free", "bust", "trade_result", "donkey", "phase", "over"].includes(e.kind));
     if (!marks.length && data.points.length) return;
-    let v;
-    if (g.phase === "over") v = g.winner() === ME ? 1 : 0;
+    // Siegchance aller Spieler – jede aus Sicht des jeweiligen Spielers, dann auf 100 % zusammen normiert
+    let all;
+    if (g.phase === "over") all = Array.from({ length: g.n }, (_, p) => (g.winner() === p ? 1 : 0));
     else {
       const nn = await net();
-      const all = new Uint8Array(KH.N_ACTIONS).fill(1);
-      v = Math.max(0, Math.min(1, nn.forward(KH.observe(g, ME), all).value));
+      const mask = new Uint8Array(KH.N_ACTIONS).fill(1);
+      const raw = Array.from({ length: g.n }, (_, p) => Math.max(0.002, Math.min(1, nn.forward(KH.observe(g, p), mask).value)));
+      const tot = raw.reduce((a, b) => a + b, 0);
+      all = raw.map((r) => r / tot);
     }
-    const label = marks.filter((e) => e.kind !== "phase" && e.kind !== "over").map(textOf).filter(Boolean).slice(0, 2).join(" ");
-    data.points.push({ v: Math.round(v * 1000) / 1000, label: skip ? "Versteigerung übersprungen" : label, p2: g.phase !== "auction" });
+    all = all.map((x) => Math.round(x * 1000) / 1000);
+    let label = marks.filter((e) => e.kind !== "phase" && e.kind !== "over").map(textOf).filter(Boolean).slice(0, 2).join(" ");
+    if (skip) label = `⏭ (KI spielte für dich) ${label}`;
+    data.points.push({ v: all[ME], all, label, p2: g.phase !== "auction" });
     if (skip) data.skipped = true;
   }
 
@@ -187,7 +193,8 @@
       points: pts.map((p) => p.v), labels: pts.map((p) => p.label), p2At,
       turns: picked.sort((a, b) => a.i - b.i),
       deals, notable, agree: { all: share(), auction: share("auction"), trade: share("trade") },
-      skipped: data.skipped, n: g.n, won: g.winner() === ME,
+      skipped: data.skipped, n: g.n, won: g.winner() === ME, names: g.names.slice(),
+      others: pts.length && pts.every((p) => p.all) ? g.names.map((_, q) => pts.map((p) => p.all[q])) : null,
     };
   }
 

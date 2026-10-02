@@ -367,6 +367,7 @@
     _checkNotes(p, notes) {
       notes = notes.map((x) => Math.trunc(Number(x)));
       if (notes.length !== DENOMS.length || notes.some((c, i) => c < 0 || c > this.cash[p][i])) throw new IllegalAction("Ungültige Scheine");
+      if (sum(notes) === 0 && sum(this.cash[p]) > 0) throw new IllegalAction("Mindestens eine Karte legen – zur Not einen 0er");
       return notes;
     }
     _doChallenge(target, animal) {
@@ -466,13 +467,20 @@
   const N_ACTIONS = A_ACCEPT + 1;
   const M = 1000.0;
 
+  /** Im Kuhhandel liegt immer mindestens eine Karte – zur Not ein 0er (sonst der kleinste Schein). */
+  function atLeastOneCard(pay, notes) {
+    pay = pay.slice();
+    if (sum(pay) === 0 && sum(notes) > 0) pay[notes.findIndex((c) => c > 0)] = 1;
+    return pay;
+  }
+
   function buildStack(notes, frac, zeroMode) {
     const cash = notesValue(notes);
     const target = pyRound(frac * cash / 10) * 10;
     const pay = (composePayment(notes, target) || DENOMS.map(() => 0)).slice();
     const z = notes[0];
     pay[0] = zeroMode === 0 ? 0 : zeroMode === 1 ? Math.floor((z + 1) / 2) : z;
-    return pay;
+    return atLeastOneCard(pay, notes);
   }
 
   function legalMask(g) {
@@ -637,7 +645,7 @@
   const KH = {
     ANIMALS, NUM_ANIMALS, VALUES, NAMES, DENOMS, ESEL, MAX_SEATS, N_ACTIONS,
     notesValue, stackSize, bidCap, composePayment, pyRound, Game, IllegalAction,
-    legalMask, decodeAction, observe, playerView, buildStack,
+    legalMask, decodeAction, observe, playerView, buildStack, atLeastOneCard,
   };
   if (typeof module !== "undefined" && module.exports) module.exports = KH;
   else root.KH = KH;

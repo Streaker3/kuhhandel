@@ -50,6 +50,14 @@ def stack_size(notes) -> int:
     return 0 if c == 0 else 1 if c <= 3 else 2 if c <= 6 else 3 if c <= 10 else 4 if c <= 16 else 5
 
 
+def at_least_one_card(pay, notes):
+    """Im Kuhhandel liegt immer mindestens eine Karte – zur Not ein 0er (sonst der kleinste Schein)."""
+    pay = list(pay)
+    if sum(pay) == 0 and sum(notes) > 0:
+        pay[next(i for i, c in enumerate(notes) if c > 0)] = 1
+    return tuple(pay)
+
+
 def bid_cap(cash: int) -> int:
     return (cash * 2 + 100) // 10 * 10
 
@@ -399,6 +407,8 @@ class Game:
         notes = tuple(int(x) for x in notes)
         if len(notes) != len(DENOMS) or any(c < 0 or c > h for c, h in zip(notes, self.cash[p])):
             raise IllegalAction("Ungültige Scheine")
+        if sum(notes) == 0 and sum(self.cash[p]) > 0:
+            raise IllegalAction("Mindestens eine Karte legen – zur Not einen 0er")
         return notes
 
     def _do_challenge(self, target, animal):

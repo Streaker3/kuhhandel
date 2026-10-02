@@ -800,13 +800,15 @@ const QUICK_HTML = `<div class="btns quick">
   <button class="btn small" data-qp="none">Leeren</button></div>`;
 const bindQuick = () => document.querySelectorAll("[data-qp]").forEach((b) => (b.onclick = () => quickPick(b.dataset.qp)));
 const cardsLabel = (n) => `${n} Karte${n === 1 ? "" : "n"}`;
+// Im Kuhhandel liegt immer mindestens eine Karte (zur Not ein 0er) – wie am echten Tisch
+const mustPick = () => notesCount(selected) === 0 && notesCount(V.players[V.me].notes) > 0;
 function zeroGo(label = "Verdeckt hinlegen") {
-  if (notesCount(selected) > 0) { zeroConfirm = false; return label; }
-  return zeroConfirm ? "Wirklich mit 0 Karten? Nochmal klicken" : label;
+  const hint = mustPick() ? `<div class="hint warn">Lege mindestens eine Karte – zur Not einen 0er.</div>` : "";
+  return `<div class="btns" style="margin-top:8px"><button class="btn primary" id="go" ${mustPick() ? "disabled" : ""}>${label}</button>`
+    + `${label === "Verdeckt hinlegen" ? "" : `<button class="btn small" id="back">Zurück</button>`}</div>${hint}`;
 }
 function zeroSubmit(kind) {
-  if (notesCount(selected) === 0 && !zeroConfirm) { zeroConfirm = true; renderActions(); return; }
-  zeroConfirm = false;
+  if (mustPick()) return;
   act({ kind, notes: selected });
 }
 const notesSum = (c) => c.reduce((s, x, i) => s + x * V.denoms[i], 0);
@@ -838,7 +840,6 @@ document.addEventListener("keydown", (e) => {
   const menuOpen = $("#menu").classList.contains("open") || $("#log").classList.contains("open");
   if (keyHandler && !menuOpen && !$("#overlay").classList.contains("show")) keyHandler(e);
 });
-let zeroConfirm = false;   // Gebot mit 0 Karten muss bestätigt werden
 let panelErr = null, panelErrUntil = 0;
 
 function renderActions() {
@@ -988,7 +989,7 @@ function renderActions() {
     box.innerHTML = `<h4>Verdecktes Gebot für ${t.k}× ${V.animals[t.animal].name} von ${nameOf(t.target)}</h4>
       <div class="sumline">${cardsLabel(notesCount(selected))} · Wert <span class="num" style="font-size:20px">${notesSum(selected)}</span></div>
       ${QUICK_HTML}
-      <div class="btns" style="margin-top:8px"><button class="btn primary" id="go">${zeroGo()}</button></div>
+      ${zeroGo()}
       ${overWarn(selected)}
       <div class="hint only">${nameOf(t.target)} sieht nur die Anzahl deiner Karten.</div>`;
     $("#go").onclick = () => zeroSubmit("offer");
@@ -1006,7 +1007,7 @@ function renderActions() {
   box.innerHTML = `<h4>Dein verdecktes Gegengebot (${nameOf(t.challenger)} bietet ${t.offer_count} Karte${t.offer_count === 1 ? "" : "n"})</h4>
     <div class="sumline">${cardsLabel(notesCount(selected))} · Wert <span class="num" style="font-size:20px">${notesSum(selected)}</span></div>
     ${QUICK_HTML}
-    <div class="btns" style="margin-top:8px"><button class="btn primary" id="go">${zeroGo("Gegengebot legen")}</button><button class="btn small" id="back">Zurück</button></div>
+    ${zeroGo("Gegengebot legen")}
     ${overWarn(selected)}`;
   $("#go").onclick = () => zeroSubmit("counter");
   bindQuick();
@@ -1453,7 +1454,7 @@ const RULES_HTML = `
   <h3>Phase 2 – Kuhhandel</h3>
   <ul>
     <li>Wer dran ist, fordert jemanden heraus, der dieselbe Tierart (unvollständig) hat. Haben beide mindestens 2, geht es um 2 Karten, sonst um 1.</li>
-    <li>Der Herausforderer legt verdeckt Geldkarten hin – der Gegner sieht nur die Anzahl.</li>
+    <li>Der Herausforderer legt verdeckt Geldkarten hin – der Gegner sieht nur die Anzahl. Es liegt immer mindestens eine Karte (zur Not ein 0er).</li>
     <li>Der Gegner <b>nimmt an</b> (er bekommt das Geld, der Herausforderer die Karten) oder macht ein <b>Gegengebot</b>.</li>
     <li>Beim Gegengebot gewinnt das höhere Gebot und zahlt nur die <b>Differenz</b>. Gleichstand: Der Herausforderer gewinnt, kein Geld fließt.</li>
     <li>Herausfordern ist Pflicht, solange es möglich ist.</li>
@@ -1622,26 +1623,41 @@ function showResults() {
  *  Gemessen wird der Layout-Viewport, damit Zoomen oder die Handy-Tastatur nichts umwirft. */
 // --------------------------------------------------------------- Rückblick (Statistiken nach dem Spiel)
 const TURN_NUM = ["①", "②", "③"];
+const CH = { W: 600, H: 210, L: 38, R: 10, T: 12, B: 22 };
 function winChart(S) {
-  const W = 600, H = 210, L = 38, R = 10, T = 12, B = 22;
+  const { W, H, L, R, T, B } = CH;
   const n = S.points.length;
   const x = (i) => L + (n > 1 ? (i / (n - 1)) * (W - L - R) : 0);
   const y = (v) => T + (1 - v) * (H - T - B);
-  const line = S.points.map((v, i) => `${i ? "L" : "M"}${x(i).toFixed(1)},${y(v).toFixed(1)}`).join("");
-  const area = `${line}L${x(n - 1).toFixed(1)},${y(0)}L${x(0)},${y(0)}Z`;
+  const path = (vals) => vals.map((v, i) => `${i ? "L" : "M"}${x(i).toFixed(1)},${y(v).toFixed(1)}`).join("");
   let g = "";
   for (const v of [0, 0.25, 0.5, 0.75, 1]) {
     g += `<line class="grid" x1="${L}" x2="${W - R}" y1="${y(v)}" y2="${y(v)}"/><text class="ax" x="${L - 6}" y="${y(v) + 4}" text-anchor="end">${v * 100}%</text>`;
   }
   const fair = 1 / S.n;
   g += `<line class="fair" x1="${L}" x2="${W - R}" y1="${y(fair)}" y2="${y(fair)}"/><text class="ax fairt" x="${W - R}" y="${y(fair) - 5}" text-anchor="end">Gleichstand ${Math.round(fair * 100)}%</text>`;
-  if (S.p2At > 0) g += `<line class="p2" x1="${x(S.p2At)}" x2="${x(S.p2At)}" y1="${T}" y2="${y(0)}"/><text class="ax" x="${x(S.p2At) + 5}" y="${T + 10}">Kuhhandel</text>`;
-  g += `<text class="ax" x="${L}" y="${H - 5}">Spielbeginn</text><text class="ax" x="${W - R}" y="${H - 5}" text-anchor="end">Ende</text>`;
-  const marks = S.turns.map((t, k) => `<g class="tm ${t.d > 0 ? "up" : "down"}"><circle cx="${x(t.i)}" cy="${y(S.points[t.i])}" r="11"/>
+  if (S.p2At > 0) g += `<line class="p2" x1="${x(S.p2At)}" x2="${x(S.p2At)}" y1="${T}" y2="${y(0)}"/><text class="ax" x="${x(S.p2At) + 5}" y="${T + 12}">Kuhhandel</text>`;
+  g += `<text class="ax" x="${L}" y="${H - 4}">Spielbeginn</text><text class="ax" x="${W - R}" y="${H - 4}" text-anchor="end">Ende</text>`;
+  // Gegner dünn in Blau, man selbst kräftig in Rot obendrauf
+  const others = S.others ? S.others.map((vals, q) => (q === 0 ? "" : `<path class="opp" d="${path(vals)}"/>`)).join("") : "";
+  const marks = S.turns.map((t, k) => `<g class="tm"><circle cx="${x(t.i)}" cy="${y(S.points[t.i])}" r="11"/>
     <text x="${x(t.i)}" y="${y(S.points[t.i]) + 4.5}" text-anchor="middle">${k + 1}</text></g>`).join("");
-  return `<svg class="wchart" viewBox="0 0 ${W} ${H}" role="img" aria-label="Deine Siegchance im Spielverlauf">
-    ${g}<path class="area" d="${area}"/><path class="line" d="${line}"/>
+  return `<svg class="wchart" viewBox="0 0 ${W} ${H}" role="img" aria-label="Siegchance im Spielverlauf">
+    ${g}${others}<path class="me" d="${path(S.points)}"/>
     <line class="cross" x1="0" x2="0" y1="${T}" y2="${y(0)}" style="display:none"/><circle class="dot" r="5" style="display:none"/>${marks}</svg>`;
+}
+/** Karte mit Tierbild für einen auffälligen Kauf oder Verkauf. */
+function dealCard(d) {
+  const rel = Math.round((Math.abs(d.diff) / d.market) * 100);
+  const good = d.type === "buy" ? d.diff < 0 : d.diff > 0;
+  const tag = d.type === "buy" ? (good ? "Schnäppchen" : "Zu teuer") : (good ? "Gut verkauft" : "Unter Wert");
+  const what = d.type === "buy" ? (d.vorkauf ? "per Vorkaufsrecht gekauft" : "ersteigert") : `an ${d.who} verkauft`;
+  const img = d.key ? `<div class="dimg" style="background-image:url(${tierImg(d.key)})"></div>` : "";
+  return `<div class="deal ${good ? "good" : "bad"}">${img}
+    <div class="dtxt"><span class="tag">${tag}</span>
+      <div class="dname">${d.animal} <small>${what}</small></div>
+      <div class="dprice"><span class="num">${d.price}</span> <span class="vs">statt ≈ ${d.market}</span></div>
+      <div class="drel">${d.diff > 0 ? "+" : "−"}${Math.abs(d.diff)} (${rel} %)</div></div></div>`;
 }
 async function showStats() {
   const S = await Local.call("/api/stats", {});
@@ -1650,23 +1666,15 @@ async function showStats() {
   const turns = S.turns.length
     ? `<ol class="turns">${S.turns.map((t, k) => `<li><b class="${t.d > 0 ? "up" : "down"}">${TURN_NUM[k]} ${t.d > 0 ? "+" : "−"}${Math.round(Math.abs(t.d) * 100)} %</b> ${t.label}</li>`).join("")}</ol>`
     : `<p class="muted">Keine großen Ausschläge – die Partie verlief ziemlich gleichmäßig.</p>`;
-  const dealTxt = (d) => {
-    const rel = `${d.diff > 0 ? "+" : "−"}${Math.round((Math.abs(d.diff) / d.market) * 100)} %`;
-    if (d.type === "buy") {
-      const good = d.diff < 0;
-      return `<li><span class="tag ${good ? "good" : "bad"}">${good ? "Schnäppchen" : "Teuer"}</span> ${d.animal} für <b>${d.price}</b> gekauft – üblich ≈ ${d.market} <span class="rel">(${rel})</span></li>`;
-    }
-    const good = d.diff > 0;
-    return `<li><span class="tag ${good ? "good" : "bad"}">${good ? "Gut verkauft" : "Unter Wert"}</span> ${d.animal} für <b>${d.price}</b> an ${d.who} – üblich ≈ ${d.market} <span class="rel">(${rel})</span></li>`;
-  };
-  const deals = S.deals.length ? `<ul class="deals">${S.deals.map(dealTxt).join("")}</ul>`
+  const deals = S.deals.length ? `<div class="deals">${S.deals.map(dealCard).join("")}</div>`
     : `<p class="muted">Alle deine Käufe und Verkäufe lagen nah am üblichen Preis.</p>`;
   const notable = S.notable.length ? `<ul class="notable">${S.notable.map((d) => `<li><small>${d.ctx}</small>${d.text}</li>`).join("")}</ul>`
     : `<p class="muted">Die KI hätte nirgends deutlich anders entschieden.</p>`;
   const ov = el("div", "rules-ov", `<div class="panel stats">
     <h2>${S.won ? "🏆 " : ""}Deine Partie im Rückblick</h2>
     <h3>Deine Siegchance</h3>
-    <p class="muted">So hat die KI deine Gewinnchance im Lauf der Partie eingeschätzt. Tippe auf die Kurve für Details.</p>
+    <p class="muted">So hat die KI die Gewinnchancen im Lauf der Partie eingeschätzt. Tippe auf die Kurve für Details.</p>
+    <div class="legend"><span class="sw me"></span>${S.names[0]}${S.others ? `<span class="sw opp"></span>Gegner` : ""}</div>
     ${winChart(S)}
     <div class="cap" id="wcap">&nbsp;</div>
     ${turns}
@@ -1688,12 +1696,17 @@ async function showStats() {
   const pick = (ev) => {
     const r = svg.getBoundingClientRect();
     const vx = ((ev.clientX - r.left) / r.width) * 600;
-    const i = Math.max(0, Math.min(n - 1, Math.round(((vx - 38) / (600 - 48)) * (n - 1))));
-    const px = 38 + (n > 1 ? (i / (n - 1)) * 552 : 0), py = 12 + (1 - S.points[i]) * 176;
+    const span = CH.W - CH.L - CH.R;
+    const i = Math.max(0, Math.min(n - 1, Math.round(((vx - CH.L) / span) * (n - 1))));
+    const px = CH.L + (n > 1 ? (i / (n - 1)) * span : 0), py = CH.T + (1 - S.points[i]) * (CH.H - CH.T - CH.B);
     const cr = svg.querySelector(".cross"), dot = svg.querySelector(".dot");
     cr.setAttribute("x1", px); cr.setAttribute("x2", px); cr.style.display = "";
     dot.setAttribute("cx", px); dot.setAttribute("cy", py); dot.style.display = "";
-    cap.innerHTML = `<b>${Math.round(S.points[i] * 100)} %</b> ${S.labels[i] || (i === 0 ? "Spielbeginn" : "")}`;
+    const all = S.others
+      ? S.names.map((nm, q) => [nm, S.others[q][i]]).sort((a, b) => b[1] - a[1])
+        .map(([nm, v]) => `<span class="${nm === S.names[0] ? "me" : ""}">${nm} ${Math.round(v * 100)} %</span>`).join(" · ")
+      : `<b>${Math.round(S.points[i] * 100)} %</b>`;
+    cap.innerHTML = `<div>${all}</div><div class="muted">${S.labels[i] || (i === 0 ? "Spielbeginn" : "")}</div>`;
   };
   svg.addEventListener("pointermove", pick);
   svg.addEventListener("pointerdown", pick);

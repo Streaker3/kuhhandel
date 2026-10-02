@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import random
 
-from .engine import DENOMS, VALUES, Game, bid_cap, compose_payment, notes_value
+from .engine import DENOMS, VALUES, Game, at_least_one_card, bid_cap, compose_payment, notes_value
 
 TOTAL_QUARTET_VALUE = sum(VALUES)
 MONEY_PER_PLAYER = 940  # 90 Start + 850 Esel-Boni
@@ -25,7 +25,7 @@ class RandomBot:
         if k == "challenge":
             return ("challenge", *self.rng.choice(g.trade_options(p)))
         if k in ("offer", "counter"):
-            return (k, tuple(self.rng.randint(0, c) for c in g.cash[p]))
+            return (k, at_least_one_card([self.rng.randint(0, c) for c in g.cash[p]], g.cash[p]))
         return (k,)
 
 
@@ -125,7 +125,7 @@ class HeuristicBot:
             lower = compose_payment(notes, max(0, target // 2)) or (0,) * len(DENOMS)
             pay = list(lower)
         pay[0] = self.rng.randint(0, notes[0])
-        return tuple(pay)
+        return at_least_one_card(pay, notes)
 
 
 def play_game(bots, seed=None, n=None):
