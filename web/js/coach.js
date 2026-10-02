@@ -52,7 +52,8 @@
     for (let i = 0; i < prob.length; i++) if (mask[i] && prob[i] > 1e-4) opts.push({ a: KH.decodeAction(g, i), p: prob[i] });
     const kind = action[0];
     const au = g.auction, t = g.trade;
-    const rec = { cat: "", agree: true, sev: 0, text: "", ctx: "" };
+    // pt = Index des nächsten Messpunkts (der Abschnitt davor enthält diese Entscheidung); you/ai = Kurzfassung für die Karte
+    const rec = { cat: "", agree: true, sev: 0, text: "", ctx: "", pt: data.points.length, key: null, you: "", ai: "" };
 
     if (kind === "bid" || kind === "pass") {
       const animal = N()[au.card];
@@ -62,6 +63,9 @@
       const bids = opts.filter((o) => o.a[0] === "bid");
       const pBid = 1 - pPass;
       const aiBid = pBid > 0 ? r10(bids.reduce((s, o) => s + o.p * o.a[1], 0) / pBid) : 0;
+      rec.key = KH.ANIMALS[au.card][0];
+      rec.you = kind === "bid" ? `${action[1]} geboten` : `gepasst bei ${au.amount}`;
+      rec.ai = pPass >= 0.5 ? "aussteigen" : `weiterbieten, etwa ${aiBid}`;
       if (kind === "bid") {
         rec.agree = pBid >= 0.5;
         if (pPass >= 0.75) {
@@ -81,6 +85,9 @@
       rec.ctx = `Karte ${cardNo(g)} · ${animal}`;
       const pBuy = opts.filter((o) => o.a[0] === "buy").reduce((s, o) => s + o.p, 0);
       rec.agree = kind === "buy" ? pBuy >= 0.5 : pBuy < 0.5;
+      rec.key = KH.ANIMALS[au.card][0];
+      rec.you = kind === "buy" ? `selbst gekauft für ${au.amount}` : `${au.amount} genommen`;
+      rec.ai = pBuy >= 0.5 ? "selbst kaufen" : "Geld nehmen";
       if (kind === "buy" && pBuy < 0.25) {
         rec.sev = 1 - pBuy;
         rec.text = `Du hast ${animal} per Vorkaufsrecht für ${au.amount} selbst gekauft – die KI hätte das Geld genommen.`;
@@ -95,6 +102,9 @@
       const mineP = opts.filter((o) => o.a[0] === "challenge" && o.a[1] === q && o.a[2] === a).reduce((s, o) => s + o.p, 0);
       const top = opts.filter((o) => o.a[0] === "challenge").sort((x, y) => y.p - x.p)[0];
       rec.agree = top && top.a[1] === q && top.a[2] === a;
+      rec.key = KH.ANIMALS[a][0];
+      rec.you = `${g.names[q]} um ${N()[a]}`;
+      rec.ai = top ? `${g.names[top.a[1]]} um ${N()[top.a[2]]}` : "";
       if (top && !rec.agree && mineP < 0.1 && top.p >= 0.5) {
         rec.sev = top.p - mineP;
         rec.text = `Du hast ${g.names[q]} um ${N()[a]} herausgefordert – die KI hätte ${g.names[top.a[1]]} um ${N()[top.a[2]]} herausgefordert.`;
@@ -108,6 +118,9 @@
       const pStack = stacks.reduce((s, o) => s + o.p, 0);
       const aiVal = pStack > 0 ? r10(stacks.reduce((s, o) => s + o.p * KH.notesValue(o.a[1]), 0) / pStack) : 0;
       const pAcc = opts.filter((o) => o.a[0] === "accept").reduce((s, o) => s + o.p, 0);
+      rec.key = KH.ANIMALS[t.animal][0];
+      rec.you = kind === "accept" ? "angenommen" : `${KH.notesValue(action[1])} gelegt`;
+      rec.ai = kind !== "offer" && pAcc >= 0.5 ? "annehmen" : `etwa ${aiVal} legen`;
       if (kind === "accept") {
         rec.agree = pAcc >= 0.5;
         if (pAcc < 0.2) {
@@ -148,7 +161,7 @@
         if (rb.accepted) net = iC ? -vo : vo;
         else if (vo === vc) net = 0;
         else net = won ? -Math.abs(vo - vc) : Math.abs(vo - vc);
-        data.trades.push({
+        data.trades.push({ pt: data.points.length,
           key: KH.ANIMALS[ev.animal][0], animal: N()[ev.animal], a: ev.animal, k: ev.k, other: g.names[other],
           mine: iC ? vo : vc, theirs: iC ? vc : vo, myCnt: (iC ? rb.offer : rb.counter || []).reduce((x, y) => x + y, 0),
           theirCnt: (iC ? rb.counter || [] : rb.offer).reduce((x, y) => x + y, 0),
@@ -167,9 +180,9 @@
         const animal = N()[ev.card];
         // eigener Kauf (ersteigert oder per Vorkaufsrecht) oder eigener Verkauf als Versteigerer
         const key = KH.ANIMALS[ev.card][0];
-        if (ev.player === ME) data.deals.push({ type: "buy", animal, key, price: ev.amount, market: mp, vorkauf: ev.kind === "bought", from: g.names[auBefore.auctioneer] });
+        if (ev.player === ME) data.deals.push({ pt: data.points.length, type: "buy", animal, key, price: ev.amount, market: mp, vorkauf: ev.kind === "bought", from: g.names[auBefore.auctioneer] });
         else if (ev.kind === "sold" && auBefore.auctioneer === ME)
-          data.deals.push({ type: "sell", animal, key, price: ev.amount, market: mp, who: g.names[ev.player] });
+          data.deals.push({ pt: data.points.length, type: "sell", animal, key, price: ev.amount, market: mp, who: g.names[ev.player] });
       }
     }
     const marks = evs.filter((e) => ["sold", "bought", "free", "bust", "trade_result", "donkey", "phase", "over"].includes(e.kind));
@@ -202,7 +215,7 @@
     let a = 0;
     return data.points.map((pt) => {
       while (a < pt.act) g.step(data.actions[a++]);
-      return { animals: g.animals.map((x) => x.slice()), scores: g.scores(), cash: Array.from({ length: g.n }, (_, p) => g.cashValue(p)) };
+      return { animals: g.animals.map((x) => x.slice()), scores: g.scores(), cash: Array.from({ length: g.n }, (_, p) => g.cashValue(p)), left: g.deck.length };
     });
   }
 
@@ -240,8 +253,11 @@
         const e = g.events[j];
         if (e.kind === "reveal" && e.card === main.card) { seller = e.auctioneer; break; }
       }
-      sale = { buyer: main.player, seller, price: main.kind === "free" ? 0 : main.amount, key,
-        buyerName: nm(main.player), sellerName: seller === null ? "" : nm(seller) };
+      sale = { buyer: main.player, seller, price: main.kind === "free" ? 0 : main.amount, key, animal: anim(main.card), how: main.kind,
+        buyerName: nm(main.player), sellerName: seller === null ? "" : nm(seller),
+        market: marketPrice(main.card, g.n, after.left ?? 20),
+        bids: evs.filter((e) => e.kind === "bid").map((e) => ({ p: e.player, name: nm(e.player), amount: e.amount })),
+        busts: evs.filter((e) => e.kind === "bust").map((e) => nm(e.player)) };
     } else if (main && main.kind === "bust") {
       title = `${nm(main.player)} ${main.player === ME ? "fliegst" : "fliegt"} auf`;
       detail = "Das Geld wird offengelegt, die Karte neu versteigert.";
@@ -259,8 +275,23 @@
     return { title, detail, key, conseq, sale, trade };
   }
 
-  /** Schlüsselmomente für mich: dort, wo meine Siegchance am stärksten und dauerhaft gesprungen ist. */
-  function moments(data, g) {
+  /** Liefert at(i): den Abschnitt zwischen Messpunkt i-1 und i als Moment (Klartext, Chancen davor/danach, Handel/Verkauf). */
+  function momentMaker(data, g) {
+    const pts = data.points;
+    const snaps = canReplay(data) ? snapshots(data) : null;
+    return (i) => {
+      if (i < 1 || i >= pts.length) return null;
+      const p0 = pts[i - 1], p1 = pts[i];
+      const evs = g.events.slice(p0.ev ?? 0, p1.ev ?? 0);
+      const desc = snaps ? describe(g, evs, snaps[i - 1], snaps[i], p0.ev ?? 0) : { title: p1.label, detail: "", key: null, conseq: [] };
+      if (!desc.title) desc.title = p1.label;
+      return { i, d: p1.v - p0.v, ...desc, before: p0.all || null, after: p1.all || null, skip: (p1.label || "").startsWith("⏭") };
+    };
+  }
+
+  /** Schlüsselmomente: wo meine Siegchance am stärksten und dauerhaft gesprungen ist – plus bis zu 2 Stellen,
+   *  an denen die KI ganz anders gespielt hätte als ich. Replay für Kuhhändel. */
+  function moments(data, g, at) {
     const pts = data.points;
     if (pts.length < 4) return [];
     const v = (i) => pts[Math.max(0, Math.min(pts.length - 2, i))].v;
@@ -273,18 +304,23 @@
     cand.sort((a, b) => Math.abs(b.d) - Math.abs(a.d));
     const picked = [];
     for (const c of cand) if (picked.length < 4 && picked.every((q) => Math.abs(q.i - c.i) > 1)) picked.push(c);
-    picked.sort((a, b) => a.i - b.i);
-    const replay = canReplay(data);
-    const snaps = replay ? snapshots(data) : null;
-    return picked.map((c) => {
-      const p0 = pts[c.i - 1], p1 = pts[c.i];
-      const evs = g.events.slice(p0.ev ?? 0, p1.ev ?? 0);
-      const desc = snaps ? describe(g, evs, snaps[c.i - 1], snaps[c.i], p0.ev ?? 0) : { title: p1.label, detail: "", key: null, conseq: [] };
-      if (!desc.title) desc.title = p1.label;
-      // Replay nur für Kuhhändel – bei einer Versteigerung zeigt die Mini-Animation alles Nötige
-      return { i: c.i, d: c.d, ...desc, before: p0.all || null, after: p1.all || null,
-        replay: replay && !!desc.trade, skip: (p1.label || "").startsWith("⏭") };
-    });
+    const out = new Map();
+    for (const c of picked) { const m = at(c.i); if (m) out.set(c.i, { ...m, d: c.d }); }
+    // KI hätte ganz anders gespielt
+    let extra = 0;
+    const seen = new Set();
+    for (const d of data.decisions.filter((x) => x.sev >= 0.75 && x.text && x.pt !== undefined).sort((a, b) => b.sev - a.sev)) {
+      const i = Math.min(d.pt, pts.length - 1);
+      if (seen.has(i)) continue;
+      seen.add(i);
+      const ai = { text: d.text, you: d.you, ai: d.ai };
+      if (out.has(i)) { out.get(i).ai = out.get(i).ai || ai; continue; }
+      if (extra >= 2) continue;
+      const m = at(i);
+      // Überschrift = deine Entscheidung; was danach passierte, steht darunter
+      if (m) { out.set(i, { ...m, ai, kind: "ai", title: `${d.ctx}: KI hätte anders gespielt`, detail: [m.title, m.detail].filter(Boolean).join(" ") }); extra++; }
+    }
+    return [...out.values()].sort((a, b) => a.i - b.i).map((m) => ({ ...m, replay: !!m.trade }));
   }
 
   /** Üblicher Netto-Preis je Karte im Kuhhandel (was der Gewinner im Schnitt zahlt). */
@@ -314,10 +350,12 @@
       const s = dec.filter((d) => !c || d.cat === c);
       return s.length ? { agree: s.filter((d) => d.agree).length, n: s.length } : null;
     };
+    const at = momentMaker(data, g);
+    const withMoment = (x) => ({ ...x, moment: x.pt !== undefined ? at(x.pt) : null });   // für das Replay
     const notableOf = (cat, k) => {
       const seen = new Set();
       return dec.filter((d) => d.cat === cat && d.sev >= 0.6 && d.text).sort((a, b) => b.sev - a.sev)
-        .filter((d) => (seen.has(d.ctx) ? false : seen.add(d.ctx))).slice(0, k);
+        .filter((d) => (seen.has(d.ctx) ? false : seen.add(d.ctx))).slice(0, k).map(withMoment);
     };
 
     // ---- Versteigerung
@@ -330,8 +368,8 @@
       buyRatio: ratio(buys), sellRatio: ratio(sells),
       bids: data.stats.bids, bluffs: data.stats.bluffs, busts: data.stats.busts,
       deals: all.filter((d) => Math.abs(d.diff) >= Math.max(20, 0.25 * d.market))
-        .sort((a, b) => Math.abs(b.diff) - Math.abs(a.diff)).slice(0, 6),
-      notable: notableOf("auction", 2), agree: share("auction"),
+        .sort((a, b) => Math.abs(b.diff) - Math.abs(a.diff)).slice(0, 6).map(withMoment),
+      notable: notableOf("auction", 3), agree: share("auction"),
     };
 
     // ---- Kuhhandel: Highlights = bester, schlechtester und knappster Handel
@@ -357,14 +395,14 @@
       paid: tr.filter((t) => t.net < 0).reduce((s, t) => s - t.net, 0),
       received: tr.filter((t) => t.net > 0).reduce((s, t) => s + t.net, 0),
       challenged: tr.filter((t) => t.iC).length,
-      highlights: hl.map(({ t, kind }) => ({ ...t, kind })),
-      notable: notableOf("trade", 2), agree: share("trade"),
+      highlights: hl.map(({ t, kind }) => withMoment({ ...t, kind })),
+      notable: notableOf("trade", 3), agree: share("trade"),
     };
 
     const p2At = pts.findIndex((p) => p.p2);
     return {
       points: pts.map((p) => p.v), labels: pts.map((p) => p.label), p2At,
-      turns: picked.sort((a, b) => a.i - b.i), moments: moments(data, g),
+      turns: picked.sort((a, b) => a.i - b.i), moments: moments(data, g, at),
       auction, trade, agree: share(),
       skipped: data.skipped, n: g.n, won: g.winner() === ME, names: g.names.slice(),
       others: pts.length && pts.every((p) => p.all) ? g.names.map((_, q) => pts.map((p) => p.all[q])) : null,

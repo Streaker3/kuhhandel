@@ -1020,3 +1020,61 @@ body.compact #offer-pile .title .tip { display: none; }
   border: 2px solid rgba(255,255,255,.85); box-shadow: 0 3px 8px rgba(0,0,0,.4); }
 .trx .stamp.good { background: #2f8a46; }
 .trx .stamp.bad { background: #b3342f; }
+
+/* ---- gleiche Tierart hervorheben (Maus über einer Karte) */
+.hgroup.same-a .card, .ogroup.same-a .card, #revealed .tcard.same-a, #revealed .flip.same-a .face.f {
+  box-shadow: 0 0 0 3px #3d8bfd, 0 0 14px 3px rgba(61,139,253,.55), 0 4px 10px rgba(0,0,0,.3) !important;
+}
+
+/* ---- kleiner Replay-Knopf oben rechts in Karten */
+.moment, .deal, .hl, .aicard { position: relative; }
+.rpi { position: absolute; top: 6px; right: 6px; z-index: 5; width: 28px; height: 28px; border-radius: 50%; padding: 0 0 0 2px;
+  border: 2px solid var(--wood); background: var(--gold); color: var(--wood); font-size: 11px; line-height: 1;
+  display: grid; place-items: center; box-shadow: 0 2px 0 var(--wood); }
+.rpi:hover { background: #ffd95e; transform: translateY(-1px); }
+.rpi:active { transform: translateY(1px); box-shadow: none; }
+
+/* ---- Kuhhandel-Highlight: Stapel mit Kartenanzahl */
+.hlm .fan { position: relative; height: 24px; display: inline-block; }
+.hlm .fan i { position: absolute; top: 0; width: 16px; height: 24px; border-radius: 2px; background: url("assets/web/rueckseite_geld.webp") center / cover; box-shadow: 0 1px 2px rgba(0,0,0,.5); }
+.hlm .cntc { font-family: "Lilita One"; font-size: 12px; color: var(--paper); background: rgba(0,0,0,.4); border-radius: 99px; padding: 0 6px; }
+
+/* ---- KI hätte anders entschieden: Vergleich Du / KI */
+.aicards { display: flex; flex-direction: column; gap: 8px; margin: 6px 0; }
+.aicard { display: flex; gap: 10px; align-items: center; background: #fffaf0; border: 2px solid #e3d4b2; border-left: 6px solid #3d8bfd; border-radius: 12px; padding: 8px 40px 8px 10px; }
+.aicard .mimg { flex: none; width: 36px; height: 54px; border-radius: 5px; background: center / cover; box-shadow: 0 1px 4px rgba(0,0,0,.3); }
+.aicard .mtxt { flex: 1; min-width: 0; font-size: 14px; }
+.aicard small { display: block; font-size: 12px; color: var(--ink-soft); margin-bottom: 3px; }
+.aicmp { display: grid; grid-template-columns: auto 1fr; gap: 3px 8px; align-items: center; margin: 4px 0; }
+.aicmp .ylabel, .aicmp .alabel { font-size: 11px; font-weight: 700; padding: 1px 8px; border-radius: 99px; text-align: center; white-space: nowrap; }
+.aicmp .ylabel { background: #efe2c4; color: var(--ink); }
+.aicmp .alabel { background: #3d8bfd; color: #fff; }
+.aicmp .yv { font-size: 14px; }
+.aicmp .av { font-size: 14px; font-weight: 600; color: #1f5fbf; }
+.aitext { font-size: 13px; color: #1f5fbf; margin: 4px 0; }
+.moment.m-ai { border-left-color: #3d8bfd; }
+.moment { padding-right: 40px; }
+.wchart .tm.ai circle:not(.tp) { fill: #3d8bfd; }
+
+/* ---- Replay einer Versteigerung */
+.auc { position: absolute; left: 50%; top: 50%; width: 64px; height: 96px; margin: -48px 0 0 -32px; border-radius: 6px; background: center / cover;
+  box-shadow: 0 4px 12px rgba(0,0,0,.5); opacity: 0; transform: rotateY(90deg) scale(.8);
+  transition: transform .6s cubic-bezier(.3,.7,.2,1), opacity .3s; }
+.s-card .auc { opacity: 1; transform: none; }
+.s-win .auc { opacity: 0; transform: translateY(calc(var(--win) * 150px)) scale(.9); transition: transform .8s cubic-bezier(.4,.1,.2,1), opacity .4s .5s; }
+.ticker { position: absolute; right: 10px; top: 48px; bottom: 48px; width: 118px; display: flex; flex-direction: column; justify-content: center; gap: 4px; }
+.tk { display: flex; justify-content: space-between; align-items: center; gap: 6px; padding: 2px 9px; border-radius: 99px; font-size: 12px; font-weight: 600;
+  background: rgba(247,239,220,.92); color: var(--ink); border-left: 4px solid var(--c, var(--wood)); opacity: 0; transform: translateX(20px);
+  transition: transform .3s, opacity .3s, background .2s; }
+.tk b { font-size: 14px; font-weight: 400; }
+.tk.in { opacity: .65; transform: none; }
+.tk.hi { opacity: 1; background: var(--gold); }
+.tk.bust { border-left-color: #b3342f; background: #f5c4bd; justify-content: center; }
+.au-stage .trd { top: auto; bottom: 96px; }
+.aumoney { position: absolute; left: 50%; top: 50%; display: flex; align-items: center; gap: 5px; opacity: 0; z-index: 3;
+  transform: translate(-50%, calc(var(--win) * 120px)); transition: transform .8s cubic-bezier(.4,.1,.2,1), opacity .3s; }
+.aumoney i { width: 22px; height: 33px; border-radius: 3px; background: url("assets/web/rueckseite_geld.webp") center / cover; box-shadow: 0 1px 3px rgba(0,0,0,.5); }
+.aumoney b { font-size: 18px; font-weight: 400; color: var(--paper); text-shadow: 0 1px 2px rgba(0,0,0,.7); }
+.s-win .aumoney { opacity: 1; transform: translate(-50%, calc(var(--win) * -120px)); }
+.s-pop .aumoney { opacity: 0; transition-delay: 0s; }
+@media (max-width: 520px) { .ticker { width: 96px; } .au-stage .auc { margin-left: -60px; } }

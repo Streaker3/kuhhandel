@@ -96,6 +96,7 @@ function applyView(view, events) {
     holdTimer = setTimeout(render, FLY_MS + REVEAL_PAUSE + 20);
   }
   V = view;
+  bulkEvents = events.length >= 25;
   for (const ev of events) handleEvent(ev);
   since = Math.max(since, view.event_count);
   render();
@@ -345,7 +346,10 @@ function spotlightCard(flip) {
   const now = au ? au.auctioneer : null;
   const prevA = lastAuctioneer;
   lastAuctioneer = now;
-  const turnOver = () => { flip.classList.remove("wait"); flip.classList.add("in"); Snd.play("flip"); };
+  const turnOver = () => {
+    flip.classList.remove("wait"); flip.classList.add("in"); Snd.play("flip");
+    if (pendingDonkey) setTimeout(releaseDonkey, 650);   // Esel liegt offen -> jetzt den Bonus zeigen
+  };
   if (FAST || speed === 2 || focusP !== null || now === null) { turnOver(); return; }
   // Ablauf: Kegel wandert zum neuen Versteigerer -> Karte dreht sich -> Scheinwerfer blendet aus -> warmes Licht erscheint
   const moves = prevA !== null && prevA !== now;
@@ -382,6 +386,26 @@ function spotlightTurn(from, to) {
   setTimeout(() => dimAt(b.getBoundingClientRect()), a ? 120 : 0);
   dimTimer = setTimeout(() => { if (focusP === null) undim(); }, 1500);
 }
+
+// Maus über einer Tierkarte: alle Karten dieser Tierart am Tisch blau umranden
+if (!TOUCH) {
+  const mark = (a) => document.querySelectorAll("#stage [data-a]").forEach((x) => x.classList.toggle("same-a", a !== null && x.dataset.a === a));
+  $("#stage").addEventListener("mouseover", (e) => {
+    const t = e.target.closest("#stage .hgroup[data-a], #stage .ogroup[data-a], #revealed [data-a]");
+    mark(t ? t.dataset.a : null);
+  });
+  $("#stage").addEventListener("mouseleave", () => mark(null));
+}
+
+// Esel-Bonus zurückhalten, bis die Karte umgedreht ist (Geld und Zähler zeigen solange den alten Stand)
+let pendingDonkey = null, donkeyTimer = null, bulkEvents = false;
+function releaseDonkey() {
+  clearTimeout(donkeyTimer);
+  const d = pendingDonkey;
+  pendingDonkey = null;
+  if (d) { d.show(); render(); }
+}
+const donkeyIdx = () => (pendingDonkey ? V.denoms.indexOf(pendingDonkey.amount) : -1);
 
 // --------------------------------------------------------------- Render
 function render() {
@@ -506,7 +530,7 @@ function renderCenter() {
       return `<div class="card mid back" style="left:${i * 1.3}px;top:${-i * 1.7}px;transform:rotate(${r}deg)"></div>`;
     }).join("");
   }
-  $("#deck-count").textContent = V.deck_left ? `${V.deck_left} Karten · Esel ${V.donkeys}/4` : "";
+  $("#deck-count").textContent = V.deck_left ? `${V.deck_left} Karten · Esel ${V.donkeys - (pendingDonkey ? 1 : 0)}/4` : "";
   $("#deck-count").style.display = V.deck_left ? "" : "none";
 
   let shown = null;
@@ -521,7 +545,7 @@ function renderCenter() {
     if (shown === null) rev.innerHTML = "";
     else if (t && V.phase === "trade") rev.innerHTML = tradeCardsHTML(t);
     else {
-      rev.innerHTML = `<div class="flip wait"><div class="face b"></div><div class="face f" style="background-image:url(${tierImg(animalKey(shown))})"></div></div>`;
+      rev.innerHTML = `<div class="flip wait" data-a="${shown}"><div class="face b"></div><div class="face f" style="background-image:url(${tierImg(animalKey(shown))})"></div></div>`;
       spotlightCard(rev.querySelector(".flip"));
     }
   }
@@ -588,7 +612,7 @@ function tradeCardsHTML(t) {
     const side = i < t.k ? 0 : 1;
     const x = i * L.tStep[0] + side * L.tStep[1];
     const r = (i - (n - 1) / 2) * 5;
-    cards += `<div class="card mid tcard" style="left:${x}px;top:${Math.abs(r) * 0.8}px;transform:rotate(${r}deg);background-image:url(${img})"></div>`;
+    cards += `<div class="card mid tcard" data-a="${t.animal}" style="left:${x}px;top:${Math.abs(r) * 0.8}px;transform:rotate(${r}deg);background-image:url(${img})"></div>`;
   }
   const w = (n - 1) * L.tStep[0] + L.tStep[1];
   return `<div class="tcards">${cards}
@@ -611,9 +635,9 @@ function renderMePlate() {
     <div class="nameplate">
       <b>${P.name}${V.auction && V.phase === "auction" && V.auction.auctioneer === V.me ? `<span class="role">${GAVEL} du versteigerst</span>` : ""}</b>
       <div class="chips">
-        <span class="chip">💰 <b>${P.cash}</b></span>
+        <span class="chip">💰 <b>${P.cash - (pendingDonkey ? pendingDonkey.amount : 0)}</b></span>
         <span class="chip">⭐ <b>${scoreOf(P.animals)}</b> Pkt</span>
-        ${V.phase === "auction" && V.auction && V.auction.auctioneer !== V.me ? `<span class="chip" title="Maximales Gebot = Bargeld × 2 + 100">Limit <b>${V.cap}</b></span>` : ""}
+        ${V.phase === "auction" && V.auction && V.auction.auctioneer !== V.me ? `<span class="chip" title="Maximales Gebot = Bargeld × 2 + 100">Limit <b>${V.cap - (pendingDonkey ? 2 * pendingDonkey.amount : 0)}</b></span>` : ""}
       </div>
     </div>
     ${bubbleHTML(V.me)}`;
@@ -622,7 +646,8 @@ function renderMePlate() {
 function renderWallet() {
   const w = $("#wallet");
   w.innerHTML = "";
-  const notes = V.players[V.me].notes;
+  const notes = V.players[V.me].notes.slice();
+  if (donkeyIdx() >= 0 && notes[donkeyIdx()] > 0) notes[donkeyIdx()]--;   // Esel-Bonus noch nicht zeigen
   const idx = V.denoms.map((_, i) => i).filter((i) => notes[i] > 0);
   const { xs } = packPositions(idx.map(() => L.wal.w), L.walW[V.phase === "trade" ? 1 : 0], compact() ? 6 : 10);
   if (!selectMode) selected = notes.map(() => 0);   // Auswahl gilt nur im Kuhhandel-Gebot
@@ -1262,12 +1287,20 @@ function handleEvent(ev) {
   $("#log-list").appendChild(li);
   $("#log-list").scrollTop = 1e9;
   const snd = { bid: "tick", sold: "sold", bought: "sold", free: "gavel", bust: "bust",
-    donkey: "iah", challenge: "moo", offer: "flip", trade_result: "coins", phase: "fanfare" }[ev.kind];
+    challenge: "moo", offer: "flip", trade_result: "coins", phase: "fanfare" }[ev.kind];
   if (snd) Snd.play(snd);
   if (ev.kind === "over") Snd.play(V.ranking && V.ranking[0] === V.me ? "win" : "lose");
 
-  if (ev.kind === "donkey") banner("Esel-Bonus!", ev.text.replace(/^\d+\. Esel! /, ""));
-  else if (ev.kind === "bust") {
+  if (ev.kind === "donkey") {
+    // Spannung: Bonus erst verraten, wenn der Esel aufgedeckt ist (siehe spotlightCard)
+    const show = () => { Snd.play("iah"); banner("Esel-Bonus!", ev.text.replace(/^\d+\. Esel! /, "")); };
+    if (bulkEvents || FAST || V.phase !== "auction") show();
+    else {
+      pendingDonkey = { amount: ev.amount, show };
+      clearTimeout(donkeyTimer);
+      donkeyTimer = setTimeout(releaseDonkey, 8000);   // Sicherheitsnetz, falls keine Karte umgedreht wird
+    }
+  } else if (ev.kind === "bust") {
     banner("Aufgeflogen!", ev.text, true);
     setTimeout(() => {
       const s = ev.player === V.me ? $("#me-plate") : document.querySelector(`.seat[data-p="${ev.player}"]`);
@@ -1707,12 +1740,19 @@ function winChart(S) {
     const [mx, my] = me.mid(m.i - 1);
     const top = Math.min(y(S.points[m.i - 1]), y(S.points[m.i]));
     const by = Math.max(T + 12, top - 22);
-    return `<g class="tm" data-m="${k}"><line x1="${mx}" x2="${mx}" y1="${by + 12}" y2="${my}"/><circle class="tp" cx="${mx}" cy="${my}" r="3"/>
+    return `<g class="tm${m.kind === "ai" ? " ai" : ""}" data-m="${k}"><line x1="${mx}" x2="${mx}" y1="${by + 12}" y2="${my}"/><circle class="tp" cx="${mx}" cy="${my}" r="3"/>
       <circle cx="${mx}" cy="${by}" r="12"/><text x="${mx}" y="${by + 4.5}" text-anchor="middle">${k + 1}</text></g>`;
   }).join("");
   return `<svg class="wchart" viewBox="0 0 ${W} ${H}" role="img" aria-label="Siegchance im Spielverlauf">
     ${g}${others}<path class="me" style="stroke:${SEAT_COLORS[0]}" d="${me.d}"/>
     <line class="cross" x1="0" x2="0" y1="${T}" y2="${y(0)}" style="display:none"/><circle class="dot" r="5" style="display:none"/>${marks}</svg>`;
+}
+// Kleiner runder Replay-Knopf oben rechts in einer Karte (Kuhhandel und Versteigerung)
+let RP_LIST = [];
+function rpBtn(m) {
+  if (!m || !(m.trade || m.sale)) return "";
+  RP_LIST.push(m);
+  return `<button class="rpi" data-rp="${RP_LIST.length - 1}" title="Nochmal ansehen" aria-label="Replay">▶</button>`;
 }
 /** Karte mit Tierbild für einen auffälligen Kauf oder Verkauf. */
 function dealCard(d) {
@@ -1722,7 +1762,7 @@ function dealCard(d) {
   const what = d.type === "buy" ? (d.vorkauf ? "per Vorkaufsrecht gekauft" : "ersteigert") : `an ${d.who} verkauft`;
   // Kauf: Karte kommt zu dir (unten), Geld geht zum Versteigerer (oben); Verkauf: umgekehrt
   const img = d.key ? auctionAnim({ key: d.key, price: d.price, top: d.type === "buy" ? (d.from || "") : d.who, bottom: "Du", down: d.type === "buy" }) : "";
-  return `<div class="deal ${good ? "good" : "bad"}">${img}
+  return `<div class="deal ${good ? "good" : "bad"}">${rpBtn(d.moment)}${img}
     <div class="dtxt"><span class="tag">${tag}</span>
       <div class="dname">${d.animal} <small>${what}</small></div>
       <div class="dprice"><span class="num">${d.price}</span> <span class="vs">statt ≈ ${d.market}</span></div>
@@ -1753,6 +1793,12 @@ const HL = {
   bargain: ["Schnäppchen", true], sold: ["Teuer verkauft", true], closewin: ["Knapp gewonnen", true],
   ripoff: ["Zu teuer bezahlt", false], cheap: ["Zu billig hergegeben", false], closeloss: ["Knapp verloren", false],
 };
+/** „Du“ gegen „KI“ nebeneinander – wenn keine Kurzfassung da ist, der Text. */
+function aiCompare(d) {
+  if (!d.you || !d.ai) return `<div class="aitext">🤖 ${d.text}</div>`;
+  return `<div class="aicmp"><span class="ylabel">Du</span><span class="yv">${d.you}</span>
+    <span class="alabel">🤖 KI</span><span class="av">${d.ai}</span></div>`;
+}
 /** Kuhhandel-Highlight als Endlos-Animation: Karten von links/rechts, Gebote von oben/unten, Differenz, Karten zum Gewinner. */
 function tradeHighlight(t, me) {
   const [title, good] = HL[t.kind];
@@ -1764,11 +1810,15 @@ function tradeHighlight(t, me) {
   const res = t.won
     ? `Du bekommst ${t.k}× ${t.animal}${t.net < 0 ? ` und zahlst <b>${-t.net}</b>` : t.net > 0 ? ` und erhältst sogar ${t.net}` : " ohne zu zahlen"}`
     : `${t.other} bekommt ${t.k}× ${t.animal}${t.net > 0 ? `, du erhältst <b>${t.net}</b>` : t.net < 0 ? `, du zahlst ${-t.net}` : ""}`;
-  return `<div class="hl ${good ? "good" : "bad"}">
+  const fan = (n) => Array.from({ length: Math.max(1, Math.min(n, 6)) }, (_, i) => `<i style="left:${i * 5}px"></i>`).join("");
+  const money = (x, n, acc) => (x === null
+    ? `<b class="num">${acc ? "nimmt an" : "–"}</b>`
+    : `<span class="fan" style="width:${16 + (Math.min(n, 6) - 1) * 5}px">${fan(n)}</span><span class="cntc">×${n}</span><b class="num">${x}</b>`);
+  return `<div class="hl ${good ? "good" : "bad"}">${rpBtn(t.moment)}
     <div class="hl-stage" style="--exit:${t.won ? 1 : -1}">
       <span class="who top">${t.other}</span><span class="who bot">${me}</span>
-      <div class="hlm top"><i></i><b class="num">${amt(t.theirs, t.accepted && t.iC)}</b></div>
-      <div class="hlm bot"><i></i><b class="num">${amt(t.mine, t.accepted && !t.iC)}</b></div>
+      <div class="hlm top">${money(t.theirs, t.theirCnt ?? 0, t.accepted && t.iC)}</div>
+      <div class="hlm bot">${money(t.mine, t.myCnt ?? 0, t.accepted && !t.iC)}</div>
       <div class="hlrow"><div class="hlg">${cards("l")}</div><div class="hlg">${cards("r")}</div></div>
       <div class="hld num">${diff}</div>
     </div>
@@ -1782,6 +1832,7 @@ function tradeHighlight(t, me) {
 async function showStats() {
   const S = await Local.call("/api/stats", {});
   if (!S || S.error) { toast("Für diese Partie gibt es keine Statistik."); return; }
+  RP_LIST = [];
   const me = S.names[0];
   const A = S.auction || {}, T = S.trade || {};
   const pctS = (a) => (a ? `${Math.round((100 * a.agree) / a.n)} %` : "–");
@@ -1791,7 +1842,7 @@ async function showStats() {
     ? `<div class="moments">${ms.map((m, k) => {
         const who = m.before && m.after ? S.names.map((nm, q) => ({ nm, q, b: m.before[q], a: m.after[q] }))
           .filter((o) => o.q === 0 || Math.abs(o.a - o.b) >= 0.05).sort((x, y) => (x.q === 0 ? -1 : y.q === 0 ? 1 : Math.abs(y.a - y.b) - Math.abs(x.a - x.b))).slice(0, 3) : [];
-        return `<div class="moment ${m.d > 0 ? "m-up" : "m-down"}">
+        return `<div class="moment ${m.d > 0 ? "m-up" : "m-down"}${m.kind === "ai" ? " m-ai" : ""}">${m.replay ? rpBtn(m) : ""}
           <div class="mnum">${k + 1}</div>
           ${m.sale ? auctionAnim({ key: m.sale.key, price: m.sale.price, down: m.sale.buyer === 0,
               top: m.sale.buyer === 0 ? m.sale.sellerName : m.sale.buyerName, bottom: m.sale.buyer === 0 ? "Du" : m.sale.sellerName, cls: "small" })
@@ -1800,12 +1851,14 @@ async function showStats() {
             ${m.detail ? `<div>${m.detail}</div>` : ""}
             ${m.conseq.map((c) => `<div class="mcq">★ ${c}</div>`).join("")}
             ${m.skip ? `<div class="muted">beim Überspringen – die KI spielte für dich</div>` : ""}
+            ${m.ai ? aiCompare(m.ai) : ""}
             <div class="crs">${who.map((o) => chanceRow(o.q === 0 ? "Du" : o.nm, SEAT_COLORS[o.q], o.b, o.a, o.q === 0)).join("")}</div>
-            ${m.replay ? `<button class="btn small rp" data-m="${k}">▶ Replay ansehen</button>` : ""}
           </div></div>`;
       }).join("")}</div>`
     : `<p class="muted">Keine großen Ausschläge – deine Chancen haben sich eher gleichmäßig entwickelt.</p>`;
-  const notes = (xs) => (xs && xs.length ? `<ul class="notable">${xs.map((d) => `<li><small>${d.ctx}</small>${d.text}</li>`).join("")}</ul>`
+  const notes = (xs) => (xs && xs.length ? `<div class="aicards">${xs.map((d) => `<div class="aicard">${rpBtn(d.moment)}
+      ${d.key ? `<div class="mimg" style="background-image:url(${tierImg(d.key)})"></div>` : ""}
+      <div class="mtxt"><small>${d.ctx}</small>${aiCompare(d)}</div></div>`).join("")}</div>`
     : `<p class="muted">Hier hätte die KI nirgends deutlich anders entschieden.</p>`);
 
   const tabA = `
@@ -1855,8 +1908,8 @@ async function showStats() {
   ov.onclick = (e) => { if (e.target === ov) close(); };
   $("#stats-close").onclick = close;
   // Replay eines Schlüsselmoments: Karte oder Nummer in der Kurve antippen
-  const goReplay = (k) => { if (ms[k] && ms[k].trade) showTradeReplay(S, k); };
-  ov.querySelectorAll(".rp").forEach((b) => (b.onclick = () => goReplay(+b.dataset.m)));
+  const goReplay = (k) => { if (ms[k] && ms[k].trade) openReplay(S, ms[k], `Moment ${k + 1}`); };
+  ov.querySelectorAll(".rpi").forEach((b) => (b.onclick = (e) => { e.stopPropagation(); openReplay(S, RP_LIST[+b.dataset.rp]); }));
   ov.querySelectorAll(".tm").forEach((g) => g.addEventListener("click", (e) => { e.stopPropagation(); goReplay(+g.dataset.m); }));
   // Ringe, Balken und Skalen laufen beim Sichtbarwerden auf ihren Wert
   const animate = (root) => setTimeout(() => {
@@ -1904,8 +1957,68 @@ async function showStats() {
 // --------------------------------------------------------------- Replay eines Kuhhandels (eigenes kleines Fenster)
 // Nur die zwei Händler: einer oben, einer unten (du immer unten). Karten in die Mitte, verdeckte Stapel,
 // Aufdecken, Differenz, dann wandern Geld und Karten – darunter, wie sich die Siegchancen verschoben haben.
-function showTradeReplay(S, k) {
-  const m = S.moments[k], T = m.trade;
+function openReplay(S, m, label = "Replay") {
+  if (!m) return;
+  if (m.trade) showTradeReplay(S, m, label);
+  else if (m.sale) showAuctionReplay(S, m, label);
+}
+/** Replay einer Versteigerung: Versteigerer und Käufer (du immer unten), die Gebote laufen als Ticker ein,
+ *  Zuschlag, dann wandert die Karte zum Käufer und das Geld zum Versteigerer. */
+function showAuctionReplay(S, m, label) {
+  const A = m.sale;
+  const meIn = A.buyer === 0 || A.seller === 0;
+  const bot = meIn ? 0 : A.buyer, top = bot === A.buyer ? A.seller : A.buyer;
+  const name = (p) => (p === 0 ? "Du" : S.names[p]);
+  const role = (p) => (p === A.seller ? "versteigert" : p === A.buyer ? (A.how === "bought" ? "kauft selbst" : "bietet") : "");
+  const bids = A.bids.slice(-8);
+  const ticker = bids.map((b, i) => `<div class="tk" style="--c:${SEAT_COLORS[b.p]}" data-i="${i}"><span>${b.p === 0 ? "Du" : b.name}</span><b class="num">${b.amount}</b></div>`).join("")
+    + A.busts.map((n) => `<div class="tk bust" data-i="${bids.length}">${n} fliegt auf!</div>`).join("");
+  const verdict = A.market && A.how !== "free"
+    ? (A.price <= 0.75 * A.market ? ["Schnäppchen!", "good"] : A.price >= 1.3 * A.market ? ["Zu teuer!", "bad"] : null) : null;
+  const pop = (p, pos) => {
+    if (A.how === "free") return p === A.buyer ? `<div class="trx ${pos}"><span class="got"><i style="background-image:url(${tierImg(A.key)})"></i>+1</span><span class="stamp good">Geschenkt!</span></div>` : "";
+    const v = p === A.buyer ? -A.price : p === A.seller ? A.price : 0;
+    return `<div class="trx ${pos}"><span class="mon ${v > 0 ? "good" : "bad"}">${v > 0 ? "+" : "−"}${Math.abs(v)}</span>
+      ${p === A.buyer ? `<span class="got"><i style="background-image:url(${tierImg(A.key)})"></i>+1</span>` : ""}
+      ${p === A.buyer && verdict ? `<span class="stamp ${verdict[1]}">${verdict[0]}</span>` : ""}</div>`;
+  };
+  const bars = m.before && m.after ? `<div class="crs big"><div class="crh">Siegchancen</div>${S.names.map((nm, q) =>
+    chanceRow(q === 0 ? "Du" : nm, SEAT_COLORS[q], m.before[q], m.after[q], q === 0, true)).join("")}</div>` : "";
+  const ov = el("div", "rules-ov trv-ov", `<div class="panel trv">
+    <h2>${label}</h2>
+    <div class="trtitle">${m.title}${A.market && A.how !== "free" ? ` <span class="muted">· üblich ≈ ${A.market}</span>` : ""}</div>
+    <div class="tr-stage au-stage" style="--win:${A.buyer === bot ? 1 : -1}">
+      <div class="trp top">${avatarHTML(top)}<b>${name(top)}</b>${role(top) ? `<span class="role">${role(top)}</span>` : ""}</div>
+      <div class="trp bot">${avatarHTML(bot)}<b>${name(bot)}</b>${role(bot) ? `<span class="role">${role(bot)}</span>` : ""}</div>
+      <div class="auc" style="background-image:url(${tierImg(A.key)})"></div>
+      <div class="ticker">${ticker}</div>
+      <div class="trd num">${A.how === "free" ? "Niemand bietet" : A.how === "bought" ? `Vorkaufsrecht: ${A.price}` : `Zuschlag: ${A.price}`}</div>
+      ${A.how === "free" ? "" : `<div class="aumoney"><i></i><b class="num">${A.price}</b></div>`}
+      ${pop(top, "top")}${pop(bot, "bot")}
+    </div>
+    <div class="trres">${m.conseq.map((c) => `<div class="mcq">★ ${c}</div>`).join("")}</div>
+    ${bars}
+    <div class="btns" style="margin-top:12px"><button class="btn small" id="tr-again">⟲ Nochmal</button><button class="btn primary small" id="tr-close">Schließen</button></div>
+  </div>`);
+  document.body.appendChild(ov);
+  const close = () => ov.remove();
+  ov.onclick = (e) => { if (e.target === ov) close(); };
+  ov.querySelector("#tr-close").onclick = close;
+  ov.querySelector("#tr-again").onclick = () => { close(); showAuctionReplay(S, m, label); };
+  const st = ov.querySelector(".tr-stage");
+  const at = (ms, fn) => setTimeout(() => { if (ov.isConnected) fn(); }, ms);
+  at(250, () => st.classList.add("s-card"));
+  const tks = [...st.querySelectorAll(".tk")];
+  const STEP = Math.max(250, Math.min(520, 3000 / Math.max(1, tks.length)));
+  tks.forEach((t, i) => at(1000 + i * STEP, () => { tks.forEach((x) => x.classList.remove("hi")); t.classList.add("in", "hi"); }));
+  const t0 = 1000 + tks.length * STEP + 300;
+  at(t0, () => st.classList.add("s-diff"));
+  at(t0 + 1100, () => st.classList.add("s-win"));
+  at(t0 + 1700, () => st.classList.add("s-pop"));
+  at(t0 + 2100, () => { ov.querySelector(".trres").classList.add("on"); growChances(ov); });
+}
+function showTradeReplay(S, m, label) {
+  const T = m.trade;
   if (!T) return;
   const meIn = T.c === 0 || T.t === 0;
   const bot = meIn ? 0 : T.c, top = bot === T.c ? T.t : T.c;      // wer unten/oben sitzt
@@ -1945,7 +2058,7 @@ function showTradeReplay(S, k) {
       ${vd ? `<span class="stamp ${vd[1]}">${vd[0]}</span>` : ""}</div>`;
   };
   const ov = el("div", "rules-ov trv-ov", `<div class="panel trv">
-    <h2>Moment ${k + 1}</h2>
+    <h2>${label}</h2>
     <div class="trtitle">${T.c === 0 ? `Du forderst ${T.tName} heraus` : `${T.cName} fordert ${T.t === 0 ? "dich" : T.tName} heraus`}: <b>${T.k}× ${T.animal}</b></div>
     <div class="tr-stage" style="--win:${T.winner === bot ? 1 : -1}">
       <div class="trp top">${avatarHTML(top)}<b>${name(top)}</b>${top === T.c ? '<span class="role">fordert heraus</span>' : ""}</div>
@@ -1963,7 +2076,7 @@ function showTradeReplay(S, k) {
   const close = () => { ov.remove(); };
   ov.onclick = (e) => { if (e.target === ov) close(); };
   ov.querySelector("#tr-close").onclick = close;
-  ov.querySelector("#tr-again").onclick = () => { close(); showTradeReplay(S, k); };
+  ov.querySelector("#tr-again").onclick = () => { close(); showTradeReplay(S, m, label); };
   // Ablauf
   const st = ov.querySelector(".tr-stage");
   const at = (ms, fn) => setTimeout(() => { if (ov.isConnected) fn(); }, ms);
