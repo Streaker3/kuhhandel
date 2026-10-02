@@ -148,15 +148,33 @@
     cache[name] = new PolicyNet(buf, meta.layers);
     return cache[name];
   }
-  /** Gegner je Schwierigkeit: leicht = früher Trainingsstand, mittel = Mischung, schwer = beste KI. */
-  async function makeBot(opponents, level) {
-    if (opponents !== "ai") return new HeuristicBot();
-    if (level === "leicht") return new NNBot(await loadNet("leicht"));
-    if (level === "mittel") return new MixedBot(await loadNet("schwer"), 0.55);
-    return new NNBot(await loadNet("schwer"));
+  /** Letzter eigener Kuhhandel: Gewinnt der Bot ihn, hat er nur noch komplette Quartette (oder gar nichts) –
+   *  sein Geld kann ihm danach nichts mehr bringen. Dann legt er alles (Gebot bzw. Gegengebot). */
+  function finalAllIn(g) {
+    const t = g.trade, p = g.toAct;
+    if (!t) return null;
+    const offering = t.stage === "offer" && p === t.challenger;
+    const answering = t.stage === "respond" && p === t.target;
+    if (!offering && !answering) return null;
+    const after = g.animals[p].slice();
+    after[t.animal] += t.k;
+    if (!after.every((c) => c === 0 || c === 4)) return null;
+    return [offering ? "offer" : "counter", g.cash[p].slice()];
+  }
+  class FinalAllIn {
+    constructor(bot) { this.bot = bot; }
+    act(g) { return finalAllIn(g) || this.bot.act(g); }
   }
 
-  const AI = { PolicyNet, NNBot, HeuristicBot, MixedBot, loadNet, makeBot, sample };
+  /** Gegner je Schwierigkeit: leicht = früher Trainingsstand, mittel = Mischung, schwer = beste KI. */
+  async function makeBot(opponents, level) {
+    if (opponents !== "ai") return new FinalAllIn(new HeuristicBot());
+    if (level === "leicht") return new FinalAllIn(new NNBot(await loadNet("leicht")));
+    if (level === "mittel") return new FinalAllIn(new MixedBot(await loadNet("schwer"), 0.55));
+    return new FinalAllIn(new NNBot(await loadNet("schwer")));
+  }
+
+  const AI = { PolicyNet, NNBot, HeuristicBot, MixedBot, FinalAllIn, finalAllIn, loadNet, makeBot, sample };
   if (typeof module !== "undefined" && module.exports) module.exports = AI;
   else root.AI = AI;
 })(typeof self !== "undefined" ? self : this);

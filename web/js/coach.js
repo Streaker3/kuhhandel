@@ -9,7 +9,8 @@
   const ME = 0;
   const N = () => KH.NAMES;
 
-  const fresh = () => ({ points: [], decisions: [], deals: [], skipped: false });
+  const fresh = () => ({ points: [], decisions: [], deals: [], trades: [], stats: { bids: 0, bluffs: 0, busts: 0, free: 0 }, skipped: false });
+  const ensure = (d) => { d.trades = d.trades || []; d.stats = d.stats || { bids: 0, bluffs: 0, busts: 0, free: 0 }; return d; };
 
   let netP = null;
   const net = () => (netP = netP || root.AI.loadNet("schwer"));
@@ -36,6 +37,11 @@
 
   /** Vor einer eigenen Aktion: was hätte die KI getan? */
   async function before(data, g, action) {
+    ensure(data);
+    if (action[0] === "bid") {
+      data.stats.bids++;
+      if (action[1] > g.cashValue(ME)) data.stats.bluffs++;
+    }
     const nn = await net();
     const mask = KH.legalMask(g);
     const { logits } = nn.forward(KH.observe(g, ME), mask);
@@ -125,7 +131,31 @@
 
   /** Nach jedem Schritt (eigener oder Gegner): Siegchance und Preise festhalten. */
   async function after(data, g, auBefore, evStart, { skip = false } = {}) {
+    ensure(data);
     const evs = g.events.slice(evStart);
+    // eigene Kuhhändel: beide Gebote (aus der Aufdeck-Szene) und Ausgang
+    for (const ev of evs) {
+      if (ev.kind === "reveal_bids" && (ev.challenger === ME || ev.target === ME)) data.pendingTrade = ev;
+      if (ev.kind === "trade_result" && data.pendingTrade && (ev.challenger === ME || ev.target === ME)) {
+        const rb = data.pendingTrade;
+        data.pendingTrade = null;
+        const iC = ev.challenger === ME, other = iC ? ev.target : ev.challenger;
+        const vo = KH.notesValue(rb.offer), vc = rb.counter ? KH.notesValue(rb.counter) : null;
+        const won = ev.winner === ME;
+        let net;   // Geldfluss für mich (+ erhalten, − bezahlt)
+        if (rb.accepted) net = iC ? -vo : vo;
+        else if (vo === vc) net = 0;
+        else net = won ? -Math.abs(vo - vc) : Math.abs(vo - vc);
+        data.trades.push({
+          key: KH.ANIMALS[ev.animal][0], animal: N()[ev.animal], a: ev.animal, k: ev.k, other: g.names[other],
+          mine: iC ? vo : vc, theirs: iC ? vc : vo, myCnt: (iC ? rb.offer : rb.counter || []).reduce((x, y) => x + y, 0),
+          theirCnt: (iC ? rb.counter || [] : rb.offer).reduce((x, y) => x + y, 0),
+          accepted: !!rb.accepted, tie: !!ev.tie, won, net, iC,
+        });
+      }
+      if (ev.kind === "bust" && ev.player === ME && !skip) data.stats.busts++;
+      if (ev.kind === "free" && ev.player === ME && !skip) data.stats.free++;
+    }
     const textOf = (ev) => (ev.priv && ev.priv[ME] ? ev.priv[ME] : ev.pub);
     if (!skip) {
       for (const ev of evs) {
@@ -148,7 +178,8 @@
     else {
       const nn = await net();
       const mask = new Uint8Array(KH.N_ACTIONS).fill(1);
-      const raw = Array.from({ length: g.n }, (_, p) => Math.max(0.002, Math.min(1, nn.forward(KH.observe(g, p), mask).value)));
+      // Untergrenze 1 %: solange die Partie läuft, ist niemand rechnerisch chancenlos
+      const raw = Array.from({ length: g.n }, (_, p) => Math.max(0.01, Math.min(1, nn.forward(KH.observe(g, p), mask).value)));
       const tot = raw.reduce((a, b) => a + b, 0);
       all = raw.map((r) => r / tot);
     }
@@ -159,8 +190,15 @@
     if (skip) data.skipped = true;
   }
 
-  /** Auswertung für das Statistik-Fenster: nur das Auffälligste. */
+  /** Üblicher Netto-Preis je Karte im Kuhhandel (was der Gewinner im Schnitt zahlt). */
+  function tradePrice(a, n) {
+    const T = root.TRADE_MARKET || {};
+    return T[`${a}-${n}`] || T[`${a}-x`] || null;
+  }
+
+  /** Auswertung für das Statistik-Fenster: nur das Auffälligste, getrennt nach Versteigerung und Kuhhandel. */
   function summary(data, g) {
+    ensure(data);
     const pts = data.points;
     const turns = [];
     // Wendepunkt = Änderung, die anhält: Schnitt der 2 Punkte danach gegen die 2 davor (glättet Rauschen der Einschätzung).
@@ -171,28 +209,64 @@
       if (Math.abs(d) >= 0.08 && pts[i].label) turns.push({ i, d, label: pts[i].label });
     }
     turns.sort((a, b) => Math.abs(b.d) - Math.abs(a.d));
-    // nicht zweimal dieselbe Stelle (benachbarte Punkte)
     const picked = [];
     for (const t of turns) if (picked.length < 3 && picked.every((q) => Math.abs(q.i - t.i) > 2)) picked.push(t);
-    const deals = data.deals
-      .map((d) => ({ ...d, diff: d.price - d.market }))
-      .filter((d) => Math.abs(d.diff) >= Math.max(20, 0.3 * d.market))
-      .sort((a, b) => Math.abs(b.diff) - Math.abs(a.diff))
-      .slice(0, 3);
+
     const dec = data.decisions;
     const share = (c) => {
       const s = dec.filter((d) => !c || d.cat === c);
       return s.length ? { agree: s.filter((d) => d.agree).length, n: s.length } : null;
     };
-    // je Karte/Kuhhandel nur der deutlichste Hinweis
-    const seen = new Set();
-    const notable = dec.filter((d) => d.sev >= 0.6 && d.text).sort((a, b) => b.sev - a.sev)
-      .filter((d) => (seen.has(d.ctx) ? false : seen.add(d.ctx))).slice(0, 3);
+    const notableOf = (cat, k) => {
+      const seen = new Set();
+      return dec.filter((d) => d.cat === cat && d.sev >= 0.6 && d.text).sort((a, b) => b.sev - a.sev)
+        .filter((d) => (seen.has(d.ctx) ? false : seen.add(d.ctx))).slice(0, k);
+    };
+
+    // ---- Versteigerung
+    const all = data.deals.map((d) => ({ ...d, diff: d.price - d.market }));
+    const buys = all.filter((d) => d.type === "buy"), sells = all.filter((d) => d.type === "sell");
+    const ratio = (xs) => (xs.length ? xs.reduce((s, d) => s + d.price / d.market, 0) / xs.length : null);
+    const auction = {
+      bought: buys.length, vorkauf: buys.filter((d) => d.vorkauf).length, sold: sells.length, free: data.stats.free,
+      spent: buys.reduce((s, d) => s + d.price, 0), earned: sells.reduce((s, d) => s + d.price, 0),
+      buyRatio: ratio(buys), sellRatio: ratio(sells),
+      bids: data.stats.bids, bluffs: data.stats.bluffs, busts: data.stats.busts,
+      deals: all.filter((d) => Math.abs(d.diff) >= Math.max(20, 0.3 * d.market))
+        .sort((a, b) => Math.abs(b.diff) - Math.abs(a.diff)).slice(0, 3),
+      notable: notableOf("auction", 2), agree: share("auction"),
+    };
+
+    // ---- Kuhhandel: Highlights = bester, schlechtester und knappster Handel
+    const tr = data.trades.map((t) => {
+      const ref = (tradePrice(t.a, g.n) || 100) * t.k;
+      // Bewertung aus meiner Sicht: gewonnen -> wie günstig; verloren -> wie viel bekommen
+      const score = t.won ? (ref + t.net) / ref : (t.net - ref) / ref;
+      return { ...t, ref: Math.round(ref), score };
+    });
+    const hl = [];
+    const add = (t, kind) => { if (t && !hl.some((h) => h.t === t)) hl.push({ t, kind }); };
+    const byScore = tr.slice().sort((a, b) => b.score - a.score);
+    if (byScore[0] && byScore[0].score >= 0.3) add(byScore[0], byScore[0].won ? "bargain" : "sold");
+    const worst = byScore[byScore.length - 1];
+    if (worst && worst.score <= -0.3) add(worst, worst.won ? "ripoff" : "cheap");
+    const close = tr.filter((t) => !t.accepted && !t.tie && t.theirs !== null)
+      .sort((a, b) => Math.abs(a.mine - a.theirs) / Math.max(1, a.mine, a.theirs) - Math.abs(b.mine - b.theirs) / Math.max(1, b.mine, b.theirs))[0];
+    if (close && Math.abs(close.mine - close.theirs) <= Math.max(30, 0.1 * Math.max(close.mine, close.theirs))) add(close, close.won ? "closewin" : "closeloss");
+    const trade = {
+      n: tr.length, won: tr.filter((t) => t.won).length,
+      paid: tr.filter((t) => t.net < 0).reduce((s, t) => s - t.net, 0),
+      received: tr.filter((t) => t.net > 0).reduce((s, t) => s + t.net, 0),
+      challenged: tr.filter((t) => t.iC).length,
+      highlights: hl.map(({ t, kind }) => ({ ...t, kind })),
+      notable: notableOf("trade", 2), agree: share("trade"),
+    };
+
     const p2At = pts.findIndex((p) => p.p2);
     return {
       points: pts.map((p) => p.v), labels: pts.map((p) => p.label), p2At,
       turns: picked.sort((a, b) => a.i - b.i),
-      deals, notable, agree: { all: share(), auction: share("auction"), trade: share("trade") },
+      auction, trade, agree: share(),
       skipped: data.skipped, n: g.n, won: g.winner() === ME, names: g.names.slice(),
       others: pts.length && pts.every((p) => p.all) ? g.names.map((_, q) => pts.map((p) => p.all[q])) : null,
     };

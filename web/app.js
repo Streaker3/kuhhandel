@@ -31,12 +31,14 @@ let since = 0;             // Anzahl bereits gesehener Ereignisse
 let selected = [0, 0, 0, 0, 0, 0]; // für Kuhhandel ausgewählte Geldkarten je Stückelung
 let selectMode = null;     // "offer" | "counter" | null
 let bidValue = 0;
+let bidSnap = null;        // {from, to}: Gebot wurde automatisch auf einen passend zahlbaren Betrag erhöht
 let bidKey = "";
 // Komfort: nach zweimal Passen beim selben Tier passt man automatisch weiter (nur für dieses Tier)
 let passCount = { key: "", n: 0 };
 let autoPassKey = "";
 let autoPassTimer = null;
-const animalKeyNow = () => (V.auction ? `${V.auction.card}-${V.deck_left}` : "");
+// Schlüssel der laufenden Versteigerung; eine Wiederholung nach dem Auffliegen zählt als neue (Aussteigen endet dann)
+const animalKeyNow = () => (V.auction ? `${V.auction.card}-${V.deck_left}-${V.auction.excluded.length}` : "");
 function myPass() {
   const k = animalKeyNow();
   passCount = passCount.key === k ? { key: k, n: passCount.n + 1 } : { key: k, n: 1 };
@@ -894,13 +896,22 @@ function renderActions() {
     const min = au.min_bid;
     const key = `${au.card}-${V.deck_left}-${au.excluded.length}-${min}`;
     const fresh = key !== bidKey;
-    if (fresh) { bidKey = key; bidValue = min; }
+    // Ohne Wechselgeld: was müsste ich für x wirklich zahlen? (null = Bluff, mehr als Bargeld)
+    const payFor = (x) => (x > P.cash ? null : KH.notesValue(KH.composePayment(P.notes, x) || P.notes));
+    // automatisch gesetzte Werte springen auf den nächsten passend zahlbaren Betrag
+    const autoSet = (x) => {
+      x = Math.max(min, Math.min(V.cap, x));
+      const pay = payFor(x);
+      bidValue = pay !== null && pay > x ? pay : x;
+      bidSnap = bidValue !== x ? { from: x, to: bidValue } : null;
+    };
+    if (fresh) { bidKey = key; autoSet(min); }
     const context = au.high === null ? "Noch kein Gebot"
       : `Höchstgebot <b class="num">${au.amount}</b> · 👑 ${nameOf(au.high)}`;
     const redo = au.excluded.length ? `<div class="ctx redo">🔁 Wiederholung – ${au.excluded.map(nameOf).join(", ")} ausgeschlossen</div>` : "";
     // Schnellwahl: Mindestgebot, 50 mehr, gesamtes Bargeld (ohne Bluff)
     const allIn = Math.floor(P.cash / 10) * 10;
-    const quick = [["Min", min], ["+50", min + 40], ["Max", allIn]];
+    const quick = [["Min", min], ["Max", allIn]];
     box.innerHTML = `
       <h4>Dein Gebot für ${V.animals[au.card].name} <span class="ctx">· ${context}</span></h4>${redo}
       <div class="btns bidrow">
@@ -912,6 +923,7 @@ function renderActions() {
       </div>
       <div class="btns quick">${quick.map(([l, q]) => `<button class="btn small" data-q="${q}" ${q > V.cap || q < min ? "disabled" : ""}
         title="${l === "Max" ? "Dein gesamtes Bargeld bieten" : ""}">${l} <b class="num">${q}</b></button>`).join("")}
+        <button class="btn small" id="b50" title="50 mehr als oben eingestellt">+50</button>
         <button class="btn small out" id="bout" title="Passen und bei diesem Tier nicht mehr mitbieten">Aussteigen</button></div>
       <div class="hint" id="bhint"></div>`;
     const input = $("#bv");
@@ -923,6 +935,15 @@ function renderActions() {
       // nach dem ersten Passen beim selben Tier darauf hinweisen, was ein zweites Passen bewirkt
       let msg = passCount.key === animalKeyNow() && passCount.n === 1 ? "Nochmal passen = du steigst bei diesem Tier ganz aus." : "";
       let cls = "hint";
+      const pay = valid() ? payFor(bidValue) : null;
+      if (bidSnap && bidSnap.to !== bidValue) bidSnap = null;
+      if (valid() && bidSnap) {
+        cls += " note";
+        msg = `${bidSnap.from} kannst du nicht passend zahlen – Gebot auf ${bidValue} erhöht (ohne Wechselgeld).`;
+      } else if (pay !== null && pay > bidValue) {
+        cls += " warn";
+        msg = `${bidValue} kannst du nicht passend zahlen – bekommst du die Karte, zahlst du ${pay} (ohne Wechselgeld).`;
+      }
       if (!valid()) {
         cls += " warn";
         msg = bidValue > V.cap ? `Über deinem Limit von ${V.cap}.` : bidValue < min ? `Zu wenig – mindestens ${min}.` : "Nur Vielfache von 10.";
@@ -939,13 +960,17 @@ function renderActions() {
       placePlate();
       $("#bm").disabled = bidValue - 10 < min;
       $("#bp").disabled = bidValue + 10 > V.cap;
+      $("#b50").disabled = bidValue + 50 > V.cap;
     };
     const submit = () => { if (valid()) act({ kind: "bid", amount: bidValue }); };
     upd();
-    $("#bm").onclick = () => { bidValue = Math.max(min, Math.ceil(bidValue / 10) * 10 - 10); upd(); };
-    $("#bp").onclick = () => { bidValue = Math.min(V.cap, Math.floor(bidValue / 10) * 10 + 10); upd(); };
-    input.oninput = () => { bidValue = parseInt(input.value.replace(/\D/g, ""), 10) || 0; upd(true); };
-    box.querySelectorAll("[data-q]").forEach((b) => (b.onclick = () => { bidValue = +b.dataset.q; upd(); if (!TOUCH) input.focus(); }));
+    // selbst eingestellt (±10, Tippen): genau dieser Wert, ggf. mit roter Warnung
+    $("#bm").onclick = () => { bidSnap = null; bidValue = Math.max(min, Math.ceil(bidValue / 10) * 10 - 10); upd(); };
+    $("#bp").onclick = () => { bidSnap = null; bidValue = Math.min(V.cap, Math.floor(bidValue / 10) * 10 + 10); upd(); };
+    input.oninput = () => { bidSnap = null; bidValue = parseInt(input.value.replace(/\D/g, ""), 10) || 0; upd(true); };
+    // Schnellwahl: springt auf passend zahlbare Beträge (gelber Hinweis)
+    box.querySelectorAll("[data-q]").forEach((b) => (b.onclick = () => { autoSet(+b.dataset.q); upd(); if (!TOUCH) input.focus(); }));
+    $("#b50").onclick = () => { autoSet(Math.floor(bidValue / 10) * 10 + 50); upd(); };
     $("#bgo").onclick = submit;
     $("#bpass").onclick = myPass;
     $("#bout").onclick = () => { autoPassKey = animalKeyNow(); act({ kind: "pass" }); };
@@ -1659,43 +1684,141 @@ function dealCard(d) {
       <div class="dprice"><span class="num">${d.price}</span> <span class="vs">statt ≈ ${d.market}</span></div>
       <div class="drel">${d.diff > 0 ? "+" : "−"}${Math.abs(d.diff)} (${rel} %)</div></div></div>`;
 }
+
+// ---- Bausteine für die Statistik: Ring, Balken, Skala, Kachel (füllen sich beim Öffnen)
+const ring = (frac, center, cls = "") => `<svg class="ring ${cls}" viewBox="0 0 42 42" aria-hidden="true">
+  <circle class="rbg" cx="21" cy="21" r="15.915"/>
+  <circle class="rfg" cx="21" cy="21" r="15.915" data-v="${Math.round(frac * 100)}" style="stroke-dasharray:0 100"/>
+  <text x="21" y="24.5" text-anchor="middle">${center}</text></svg>`;
+const meter = (label, a) => (a ? `<div class="meter"><span class="ml">${label}</span>
+  <span class="mbar"><i data-w="${Math.round((100 * a.agree) / a.n)}"></i></span><b>${Math.round((100 * a.agree) / a.n)} %</b></div>` : "");
+/** Skala 50 %–150 % mit Marker; lowGood: links ist gut (beim Einkaufen). */
+function scale(title, r, lowGood, note) {
+  if (r === null) return "";
+  const pos = Math.max(0, Math.min(100, (r - 0.5) * 100));
+  const good = lowGood ? r <= 0.95 : r >= 1.05, bad = lowGood ? r >= 1.05 : r <= 0.95;
+  return `<div class="scale ${lowGood ? "low" : "high"}"><div class="st"><b>${title}</b>
+    <span class="${good ? "good" : bad ? "bad" : ""}">${Math.round(r * 100)} % des üblichen Preises</span></div>
+    <div class="sbar"><i class="mid"></i><span class="mk" data-l="${pos.toFixed(1)}"></span></div>
+    <div class="sl"><span>${lowGood ? "günstig" : "billig"}</span><span>üblich</span><span>${lowGood ? "teuer" : "teuer"}</span></div>
+    ${note ? `<div class="snote">${note}</div>` : ""}</div>`;
+}
+const tile = (num, label, cls = "") => `<div class="tile ${cls}"><b class="num">${num}</b><span>${label}</span></div>`;
+
+const HL = {
+  bargain: ["Schnäppchen", true], sold: ["Teuer verkauft", true], closewin: ["Knapp gewonnen", true],
+  ripoff: ["Zu teuer bezahlt", false], cheap: ["Zu billig hergegeben", false], closeloss: ["Knapp verloren", false],
+};
+/** Kuhhandel-Highlight als Endlos-Animation: Karten von links/rechts, Gebote von oben/unten, Differenz, Karten zum Gewinner. */
+function tradeHighlight(t, me) {
+  const [title, good] = HL[t.kind];
+  const img = tierImg(t.key);
+  const cards = (side) => Array.from({ length: t.k }, (_, i) =>
+    `<div class="hlc ${side}" style="--i:${i};--r:${(side === "l" ? -6 : 6) + i * (side === "l" ? 4 : -4)}deg;background-image:url(${img})"></div>`).join("");
+  const diff = t.accepted ? (t.iC ? `für ${t.mine}` : `für ${t.theirs}`) : t.tie ? "Gleichstand" : `Δ ${Math.abs(t.mine - t.theirs)}`;
+  const amt = (x, accepted) => (x === null ? (accepted ? "nimmt an" : "–") : x);
+  const res = t.won
+    ? `Du bekommst ${t.k}× ${t.animal}${t.net < 0 ? ` und zahlst <b>${-t.net}</b>` : t.net > 0 ? ` und erhältst sogar ${t.net}` : " ohne zu zahlen"}`
+    : `${t.other} bekommt ${t.k}× ${t.animal}${t.net > 0 ? `, du erhältst <b>${t.net}</b>` : t.net < 0 ? `, du zahlst ${-t.net}` : ""}`;
+  return `<div class="hl ${good ? "good" : "bad"}">
+    <div class="hl-stage" style="--exit:${t.won ? 1 : -1}">
+      <span class="who top">${t.other}</span><span class="who bot">${me}</span>
+      <div class="hlm top"><i></i><b class="num">${amt(t.theirs, t.accepted && t.iC)}</b></div>
+      <div class="hlm bot"><i></i><b class="num">${amt(t.mine, t.accepted && !t.iC)}</b></div>
+      <div class="hlrow"><div class="hlg">${cards("l")}</div><div class="hlg">${cards("r")}</div></div>
+      <div class="hld num">${diff}</div>
+    </div>
+    <div class="hl-txt"><span class="tag">${title}</span>
+      <div class="dname">${t.k}× ${t.animal} <small>gegen ${t.other}${t.iC ? " · du hast herausgefordert" : ""}</small></div>
+      <div class="hl-bids">${t.mine === null ? "Du hast angenommen" : `Du <b class="num">${t.mine}</b>`} · ${t.theirs === null ? `${t.other} hat angenommen` : `${t.other} <b class="num">${t.theirs}</b>`}</div>
+      <div class="hl-res">${res}</div>
+      <div class="hl-ref">üblich ≈ ${t.ref} für ${t.k === 1 ? "eine Karte" : `${t.k} Karten`}</div></div></div>`;
+}
+
 async function showStats() {
   const S = await Local.call("/api/stats", {});
   if (!S || S.error) { toast("Für diese Partie gibt es keine Statistik."); return; }
-  const fmtPct = (a) => (a ? `${Math.round((100 * a.agree) / a.n)} %` : "–");
+  const me = S.names[0];
+  const A = S.auction || {}, T = S.trade || {};
+  const pctS = (a) => (a ? `${Math.round((100 * a.agree) / a.n)} %` : "–");
   const turns = S.turns.length
     ? `<ol class="turns">${S.turns.map((t, k) => `<li><b class="${t.d > 0 ? "up" : "down"}">${TURN_NUM[k]} ${t.d > 0 ? "+" : "−"}${Math.round(Math.abs(t.d) * 100)} %</b> ${t.label}</li>`).join("")}</ol>`
     : `<p class="muted">Keine großen Ausschläge – die Partie verlief ziemlich gleichmäßig.</p>`;
-  const deals = S.deals.length ? `<div class="deals">${S.deals.map(dealCard).join("")}</div>`
-    : `<p class="muted">Alle deine Käufe und Verkäufe lagen nah am üblichen Preis.</p>`;
-  const notable = S.notable.length ? `<ul class="notable">${S.notable.map((d) => `<li><small>${d.ctx}</small>${d.text}</li>`).join("")}</ul>`
-    : `<p class="muted">Die KI hätte nirgends deutlich anders entschieden.</p>`;
+  const notes = (xs) => (xs && xs.length ? `<ul class="notable">${xs.map((d) => `<li><small>${d.ctx}</small>${d.text}</li>`).join("")}</ul>`
+    : `<p class="muted">Hier hätte die KI nirgends deutlich anders entschieden.</p>`);
+
+  const tabA = `
+    <div class="tiles">
+      ${tile(A.bought ?? 0, "Karten ersteigert")}${tile(A.sold ?? 0, "selbst verkauft")}
+      ${tile(A.vorkauf ?? 0, "Vorkaufsrecht")}${tile(A.busts ?? 0, "aufgeflogen", A.busts ? "bad" : "")}
+    </div>
+    ${scale("Beim Einkaufen", A.buyRatio ?? null, true, A.bought ? `${A.bought} Karten für zusammen ${A.spent}` : "")}
+    ${scale("Beim Verkaufen", A.sellRatio ?? null, false, A.sold ? `${A.sold} Karten für zusammen ${A.earned} verkauft` : "")}
+    <h4>Auffällige Preise</h4>
+    ${A.deals && A.deals.length ? `<div class="deals">${A.deals.map(dealCard).join("")}</div>` : `<p class="muted">Alle Preise lagen nah am üblichen Preis.</p>`}
+    <h4>Hier hätte die KI anders entschieden</h4>
+    ${meter("Wie die KI", A.agree)}
+    ${notes(A.notable)}`;
+  const tabT = T.n ? `
+    <div class="tradehead">
+      ${ring(T.won / T.n, `${T.won}/${T.n}`, "win")}
+      <div><b>${T.won} von ${T.n}</b> Kuhhändeln gewonnen<div class="muted">${T.challenged} davon hast du selbst begonnen</div></div>
+    </div>
+    <div class="tiles">${tile(T.paid, "bezahlt", T.paid > T.received ? "bad" : "")}${tile(T.received, "erhalten", T.received > T.paid ? "good" : "")}
+      ${tile((T.received - T.paid > 0 ? "+" : "") + (T.received - T.paid), "Saldo", T.received >= T.paid ? "good" : "bad")}</div>
+    <h4>Deine Highlights</h4>
+    ${T.highlights.length ? T.highlights.map((h) => tradeHighlight(h, me)).join("") : `<p class="muted">Keine besonders guten oder schlechten Händel – alles im üblichen Rahmen.</p>`}
+    <h4>Hier hätte die KI anders entschieden</h4>
+    ${meter("Wie die KI", T.agree)}
+    ${notes(T.notable)}` : `<p class="muted">Du warst an keinem Kuhhandel beteiligt.</p>`;
+
   const ov = el("div", "rules-ov", `<div class="panel stats">
     <h2>${S.won ? "🏆 " : ""}Deine Partie im Rückblick</h2>
-    <h3>Deine Siegchance</h3>
-    <p class="muted">So hat die KI die Gewinnchancen im Lauf der Partie eingeschätzt. Tippe auf die Kurve für Details.</p>
-    <div class="legend"><span class="sw me"></span>${S.names[0]}${S.others ? `<span class="sw opp"></span>Gegner` : ""}</div>
+    ${S.agree ? `<div class="agreehead">${ring(S.agree.agree / S.agree.n, pctS(S.agree))}
+      <div><b>Du hast in ${pctS(S.agree)} der Fälle so entschieden wie die KI.</b>
+        ${meter("Versteigerung", A.agree)}${meter("Kuhhandel", T.agree)}</div></div>` : ""}
+    <h3>Siegchance</h3>
+    <div class="legend"><span class="sw me"></span>${me}${S.others ? `<span class="sw opp"></span>Gegner` : ""}<span class="lhint">Tippe auf die Kurve</span></div>
     ${winChart(S)}
     <div class="cap" id="wcap">&nbsp;</div>
     ${turns}
-    <h3>Käufe &amp; Verkäufe</h3>
-    ${deals}
-    <h3>Zweitmeinung der KI</h3>
-    ${S.agree.all ? `<p>Du hast in <b>${fmtPct(S.agree.all)}</b> der Fälle so entschieden wie die KI <span class="muted">(Versteigerung ${fmtPct(S.agree.auction)}, Kuhhandel ${fmtPct(S.agree.trade)})</span>.</p>` : ""}
-    ${notable}
-    ${S.skipped ? `<p class="muted">Die Versteigerung wurde übersprungen – dort fehlen deine Entscheidungen.</p>` : ""}
-    <p class="foot">Einschätzungen der KI „Schwer“: stark, aber nicht perfekt – eine Zweitmeinung, kein Urteil. „Üblich“ = was die KI für dieses Tier zum selben Spielzeitpunkt im Schnitt zahlt.</p>
+    <div class="tabs"><button data-tab="a" class="on">🔨 Versteigerung</button><button data-tab="t">🐄 Kuhhandel</button></div>
+    <section class="tab" data-tab="a">${tabA}</section>
+    <section class="tab" data-tab="t" hidden>${tabT}</section>
+    ${S.skipped ? `<p class="muted">Die Versteigerung wurde (teilweise) übersprungen – dort hat die KI für dich gespielt.</p>` : ""}
+    <p class="foot">Einschätzungen der KI „Schwer“: stark, aber nicht perfekt – eine Zweitmeinung, kein Urteil. „Üblich“ = was KIs für dieses Tier zum selben Spielzeitpunkt im Schnitt zahlen.</p>
     <button class="big" id="stats-close">Schließen</button></div>`);
   document.body.appendChild(ov);
   const close = () => ov.remove();
   ov.onclick = (e) => { if (e.target === ov) close(); };
   $("#stats-close").onclick = close;
+  // Ringe, Balken und Skalen laufen beim Sichtbarwerden auf ihren Wert
+  const animate = (root) => setTimeout(() => {
+    root.querySelectorAll(".rfg").forEach((c) => { c.style.strokeDasharray = `${c.dataset.v} ${100 - c.dataset.v}`; });
+    root.querySelectorAll(".mbar i").forEach((b) => { b.style.width = `${b.dataset.w}%`; });
+    root.querySelectorAll(".mk").forEach((m) => { m.style.left = `${m.dataset.l}%`; });
+  }, 60);
+  animate(ov.querySelector(".panel"));
+  ov.querySelectorAll(".tabs button").forEach((b) => (b.onclick = () => {
+    ov.querySelectorAll(".tabs button").forEach((x) => x.classList.toggle("on", x === b));
+    ov.querySelectorAll("section.tab").forEach((sec) => {
+      const show = sec.dataset.tab === b.dataset.tab;
+      sec.hidden = !show;
+      if (show) {
+        sec.querySelectorAll(".rfg").forEach((c) => { c.style.strokeDasharray = "0 100"; });
+        sec.querySelectorAll(".mbar i").forEach((x) => { x.style.width = "0"; });
+        sec.querySelectorAll(".mk").forEach((x) => { x.style.left = "50%"; });
+        animate(sec);
+      }
+    });
+  }));
   // Kurve antippen/überfahren: nächsten Punkt zeigen
   const svg = ov.querySelector(".wchart"), cap = ov.querySelector("#wcap");
   const n = S.points.length;
+  const fmt = (v) => (v > 0 && v < 0.01 ? "<1 %" : `${Math.round(v * 100)} %`);
   const pick = (ev) => {
     const r = svg.getBoundingClientRect();
-    const vx = ((ev.clientX - r.left) / r.width) * 600;
+    const vx = ((ev.clientX - r.left) / r.width) * CH.W;
     const span = CH.W - CH.L - CH.R;
     const i = Math.max(0, Math.min(n - 1, Math.round(((vx - CH.L) / span) * (n - 1))));
     const px = CH.L + (n > 1 ? (i / (n - 1)) * span : 0), py = CH.T + (1 - S.points[i]) * (CH.H - CH.T - CH.B);
@@ -1703,9 +1826,9 @@ async function showStats() {
     cr.setAttribute("x1", px); cr.setAttribute("x2", px); cr.style.display = "";
     dot.setAttribute("cx", px); dot.setAttribute("cy", py); dot.style.display = "";
     const all = S.others
-      ? S.names.map((nm, q) => [nm, S.others[q][i]]).sort((a, b) => b[1] - a[1])
-        .map(([nm, v]) => `<span class="${nm === S.names[0] ? "me" : ""}">${nm} ${Math.round(v * 100)} %</span>`).join(" · ")
-      : `<b>${Math.round(S.points[i] * 100)} %</b>`;
+      ? S.names.map((nm, q) => [nm, S.others[q][i], q]).sort((a, b) => b[1] - a[1])
+        .map(([nm, v, q]) => `<span class="${q === 0 ? "me" : ""}">${nm} ${fmt(v)}</span>`).join(" · ")
+      : `<b>${fmt(S.points[i])}</b>`;
     cap.innerHTML = `<div>${all}</div><div class="muted">${S.labels[i] || (i === 0 ? "Spielbeginn" : "")}</div>`;
   };
   svg.addEventListener("pointermove", pick);
