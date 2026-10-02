@@ -19,7 +19,7 @@ from kuhhandel.model import adapt_state, load_net
 
 ROOT = Path(__file__).parent
 OUT = ROOT / "web" / "models"
-MODELS = {"leicht": ROOT / "checkpoints" / "snap_00060.pt", "schwer": ROOT / "checkpoints" / "best.pt"}
+MODELS = {"leicht": ROOT / "checkpoints" / "snap_00060.pt", "schwer": ROOT / "checkpoints_rules" / "best.pt"}   # nachtrainiert auf: mind. 1 Karte, große Scheine
 LAYERS = ["body.0.weight", "body.0.bias", "body.2.weight", "body.2.bias", "body.4.weight", "body.4.bias",
           "pi.weight", "pi.bias", "v.weight", "v.bias"]
 

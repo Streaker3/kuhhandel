@@ -1,9 +1,9 @@
 {
- "obs_dim": 207,
+ "obs_dim": 208,
  "layers": {
   "body.0.weight": [
    512,
-   207
+   208
   ],
   "body.0.bias": [
    512
@@ -44,7 +44,7 @@
   },
   "schwer": {
    "file": "models/schwer.bin",
-   "iter": 4610
+   "iter": 460
   }
  }
 }

@@ -41,21 +41,22 @@
     }
   }
 
-  function sample(logits) {
+  /** Zieht eine Aktion; temp < 1 macht die KI entschlossener (seltener unwahrscheinliche Züge). */
+  function sample(logits, temp = 1) {
     let max = -Infinity;
     for (const l of logits) if (l > max) max = l;
     let total = 0;
-    const p = Array.from(logits, (l) => { const e = Math.exp(l - max); total += e; return e; });
+    const p = Array.from(logits, (l) => { const e = Math.exp((l - max) / temp); total += e; return e; });
     let r = Math.random() * total;
     for (let i = 0; i < p.length; i++) { r -= p[i]; if (r <= 0) return i; }
     return p.length - 1;
   }
 
   class NNBot {
-    constructor(net) { this.net = net; }
+    constructor(net, temp = 1) { this.net = net; this.temp = temp; }
     act(g) {
       const { logits } = this.net.forward(KH.observe(g), KH.legalMask(g));
-      return KH.decodeAction(g, sample(logits));
+      return KH.decodeAction(g, sample(logits, this.temp));
     }
   }
 
@@ -171,7 +172,8 @@
     if (opponents !== "ai") return new FinalAllIn(new HeuristicBot());
     if (level === "leicht") return new FinalAllIn(new NNBot(await loadNet("leicht")));
     if (level === "mittel") return new FinalAllIn(new MixedBot(await loadNet("schwer"), 0.55));
-    return new FinalAllIn(new NNBot(await loadNet("schwer")));
+    // Temperatur 0,5: gleich stark, aber seltener ein unsinniger Zufallszug (z. B. alle passen beim ersten Pferd)
+    return new FinalAllIn(new NNBot(await loadNet("schwer"), 0.5));
   }
 
   const AI = { PolicyNet, NNBot, HeuristicBot, MixedBot, FinalAllIn, finalAllIn, loadNet, makeBot, sample };
