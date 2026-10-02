@@ -1495,7 +1495,7 @@ function confetti() {
 // --------------------------------------------------------------- Start / Ende / Menü
 let nPlayers = 4;
 let opponents = "ai";
-let level = "mittel";
+let level = "schwer";
 const START_HTML = $("#overlay").innerHTML;
 function segment(sel, attr, cb) {
   document.querySelectorAll(`${sel} button`).forEach((b) => (b.onclick = () => {
@@ -1607,8 +1607,11 @@ function showResults() {
   }).join("");
   ov.innerHTML = `<div class="panel"><h1>${V.ranking[0] === V.me ? "Gewonnen!" : "Spielende"}</h1>
     <p class="sub">Quartettwert × Anzahl Quartette</p>
-    <div class="results">${rows}</div><button class="big" id="again">Nochmal spielen</button></div>`;
+    <div class="results">${rows}</div>
+    <button class="big" id="again">Nochmal spielen</button>
+    <button class="big alt" id="stats">📊 Statistiken</button></div>`;
   $("#again").onclick = showStart;
+  $("#stats").onclick = showStats;
   setTimeout(() => {
     ov.classList.add("show");
     if (V.ranking[0] === V.me) confetti();
@@ -1617,6 +1620,85 @@ function showResults() {
 
 /** Bühne an das Fenster anpassen; hochkant (Handy) wird eine eigene, schmale Anordnung verwendet.
  *  Gemessen wird der Layout-Viewport, damit Zoomen oder die Handy-Tastatur nichts umwirft. */
+// --------------------------------------------------------------- Rückblick (Statistiken nach dem Spiel)
+const TURN_NUM = ["①", "②", "③"];
+function winChart(S) {
+  const W = 600, H = 210, L = 38, R = 10, T = 12, B = 22;
+  const n = S.points.length;
+  const x = (i) => L + (n > 1 ? (i / (n - 1)) * (W - L - R) : 0);
+  const y = (v) => T + (1 - v) * (H - T - B);
+  const line = S.points.map((v, i) => `${i ? "L" : "M"}${x(i).toFixed(1)},${y(v).toFixed(1)}`).join("");
+  const area = `${line}L${x(n - 1).toFixed(1)},${y(0)}L${x(0)},${y(0)}Z`;
+  let g = "";
+  for (const v of [0, 0.25, 0.5, 0.75, 1]) {
+    g += `<line class="grid" x1="${L}" x2="${W - R}" y1="${y(v)}" y2="${y(v)}"/><text class="ax" x="${L - 6}" y="${y(v) + 4}" text-anchor="end">${v * 100}%</text>`;
+  }
+  const fair = 1 / S.n;
+  g += `<line class="fair" x1="${L}" x2="${W - R}" y1="${y(fair)}" y2="${y(fair)}"/><text class="ax fairt" x="${W - R}" y="${y(fair) - 5}" text-anchor="end">Gleichstand ${Math.round(fair * 100)}%</text>`;
+  if (S.p2At > 0) g += `<line class="p2" x1="${x(S.p2At)}" x2="${x(S.p2At)}" y1="${T}" y2="${y(0)}"/><text class="ax" x="${x(S.p2At) + 5}" y="${T + 10}">Kuhhandel</text>`;
+  g += `<text class="ax" x="${L}" y="${H - 5}">Spielbeginn</text><text class="ax" x="${W - R}" y="${H - 5}" text-anchor="end">Ende</text>`;
+  const marks = S.turns.map((t, k) => `<g class="tm ${t.d > 0 ? "up" : "down"}"><circle cx="${x(t.i)}" cy="${y(S.points[t.i])}" r="11"/>
+    <text x="${x(t.i)}" y="${y(S.points[t.i]) + 4.5}" text-anchor="middle">${k + 1}</text></g>`).join("");
+  return `<svg class="wchart" viewBox="0 0 ${W} ${H}" role="img" aria-label="Deine Siegchance im Spielverlauf">
+    ${g}<path class="area" d="${area}"/><path class="line" d="${line}"/>
+    <line class="cross" x1="0" x2="0" y1="${T}" y2="${y(0)}" style="display:none"/><circle class="dot" r="5" style="display:none"/>${marks}</svg>`;
+}
+async function showStats() {
+  const S = await Local.call("/api/stats", {});
+  if (!S || S.error) { toast("Für diese Partie gibt es keine Statistik."); return; }
+  const fmtPct = (a) => (a ? `${Math.round((100 * a.agree) / a.n)} %` : "–");
+  const turns = S.turns.length
+    ? `<ol class="turns">${S.turns.map((t, k) => `<li><b class="${t.d > 0 ? "up" : "down"}">${TURN_NUM[k]} ${t.d > 0 ? "+" : "−"}${Math.round(Math.abs(t.d) * 100)} %</b> ${t.label}</li>`).join("")}</ol>`
+    : `<p class="muted">Keine großen Ausschläge – die Partie verlief ziemlich gleichmäßig.</p>`;
+  const dealTxt = (d) => {
+    const rel = `${d.diff > 0 ? "+" : "−"}${Math.round((Math.abs(d.diff) / d.market) * 100)} %`;
+    if (d.type === "buy") {
+      const good = d.diff < 0;
+      return `<li><span class="tag ${good ? "good" : "bad"}">${good ? "Schnäppchen" : "Teuer"}</span> ${d.animal} für <b>${d.price}</b> gekauft – üblich ≈ ${d.market} <span class="rel">(${rel})</span></li>`;
+    }
+    const good = d.diff > 0;
+    return `<li><span class="tag ${good ? "good" : "bad"}">${good ? "Gut verkauft" : "Unter Wert"}</span> ${d.animal} für <b>${d.price}</b> an ${d.who} – üblich ≈ ${d.market} <span class="rel">(${rel})</span></li>`;
+  };
+  const deals = S.deals.length ? `<ul class="deals">${S.deals.map(dealTxt).join("")}</ul>`
+    : `<p class="muted">Alle deine Käufe und Verkäufe lagen nah am üblichen Preis.</p>`;
+  const notable = S.notable.length ? `<ul class="notable">${S.notable.map((d) => `<li><small>${d.ctx}</small>${d.text}</li>`).join("")}</ul>`
+    : `<p class="muted">Die KI hätte nirgends deutlich anders entschieden.</p>`;
+  const ov = el("div", "rules-ov", `<div class="panel stats">
+    <h2>${S.won ? "🏆 " : ""}Deine Partie im Rückblick</h2>
+    <h3>Deine Siegchance</h3>
+    <p class="muted">So hat die KI deine Gewinnchance im Lauf der Partie eingeschätzt. Tippe auf die Kurve für Details.</p>
+    ${winChart(S)}
+    <div class="cap" id="wcap">&nbsp;</div>
+    ${turns}
+    <h3>Käufe &amp; Verkäufe</h3>
+    ${deals}
+    <h3>Zweitmeinung der KI</h3>
+    ${S.agree.all ? `<p>Du hast in <b>${fmtPct(S.agree.all)}</b> der Fälle so entschieden wie die KI <span class="muted">(Versteigerung ${fmtPct(S.agree.auction)}, Kuhhandel ${fmtPct(S.agree.trade)})</span>.</p>` : ""}
+    ${notable}
+    ${S.skipped ? `<p class="muted">Die Versteigerung wurde übersprungen – dort fehlen deine Entscheidungen.</p>` : ""}
+    <p class="foot">Einschätzungen der KI „Schwer“: stark, aber nicht perfekt – eine Zweitmeinung, kein Urteil. „Üblich“ = was die KI für dieses Tier zum selben Spielzeitpunkt im Schnitt zahlt.</p>
+    <button class="big" id="stats-close">Schließen</button></div>`);
+  document.body.appendChild(ov);
+  const close = () => ov.remove();
+  ov.onclick = (e) => { if (e.target === ov) close(); };
+  $("#stats-close").onclick = close;
+  // Kurve antippen/überfahren: nächsten Punkt zeigen
+  const svg = ov.querySelector(".wchart"), cap = ov.querySelector("#wcap");
+  const n = S.points.length;
+  const pick = (ev) => {
+    const r = svg.getBoundingClientRect();
+    const vx = ((ev.clientX - r.left) / r.width) * 600;
+    const i = Math.max(0, Math.min(n - 1, Math.round(((vx - 38) / (600 - 48)) * (n - 1))));
+    const px = 38 + (n > 1 ? (i / (n - 1)) * 552 : 0), py = 12 + (1 - S.points[i]) * 176;
+    const cr = svg.querySelector(".cross"), dot = svg.querySelector(".dot");
+    cr.setAttribute("x1", px); cr.setAttribute("x2", px); cr.style.display = "";
+    dot.setAttribute("cx", px); dot.setAttribute("cy", py); dot.style.display = "";
+    cap.innerHTML = `<b>${Math.round(S.points[i] * 100)} %</b> ${S.labels[i] || (i === 0 ? "Spielbeginn" : "")}`;
+  };
+  svg.addEventListener("pointermove", pick);
+  svg.addEventListener("pointerdown", pick);
+}
+
 function fit() {
   const vw = document.documentElement.clientWidth, vh = document.documentElement.clientHeight;
   const port = vh > vw * 1.15;

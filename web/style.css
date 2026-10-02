@@ -722,3 +722,38 @@ body.phland #actions .sumline, body.phland #actions .hint.only { display: none; 
 body.phland #actions h4 { margin-bottom: 6px; }
 body.phland .btns.quick { margin-top: 6px; }
 body.compact #offer-pile .title .tip { display: none; }
+
+/* ================================================================ Rückblick nach dem Spiel */
+.big.alt { background: #fffaf0; margin-top: 10px; }
+.panel.stats { width: min(640px, 100%); max-height: 88vh; overflow: auto; text-align: left; padding: 20px 22px 22px; }
+.panel.stats h2 { font-family: "Lilita One"; font-weight: 400; margin: 0 0 4px; color: var(--wood); font-size: 26px; }
+.panel.stats h3 { margin: 16px 0 4px; font-size: 17px; }
+.panel.stats p { margin: 4px 0; font-size: 15px; line-height: 1.4; }
+.panel.stats .muted { color: var(--ink-soft); font-size: 14px; }
+.panel.stats .foot { margin-top: 14px; font-size: 12px; color: var(--ink-soft); }
+.wchart { width: 100%; height: auto; display: block; margin-top: 6px; touch-action: none; cursor: crosshair; }
+.wchart .grid { stroke: #e3d4b2; stroke-width: 1; }
+.wchart .ax { font-size: 14px; fill: var(--ink-soft); font-family: "Fredoka", sans-serif; }
+.wchart .fair { stroke: var(--ink-soft); stroke-width: 1; stroke-dasharray: 4 4; opacity: .7; }
+.wchart .fairt { opacity: .8; }
+.wchart .p2 { stroke: var(--wood); stroke-width: 1; stroke-dasharray: 2 4; opacity: .6; }
+.wchart .area { fill: rgba(184,134,11,.14); }
+.wchart .line { fill: none; stroke: #9a6b00; stroke-width: 2.2; stroke-linejoin: round; stroke-linecap: round; }
+.wchart .cross { stroke: var(--wood); stroke-width: 1; opacity: .5; }
+.wchart .dot { fill: #9a6b00; stroke: var(--paper); stroke-width: 2; }
+.wchart .tm circle { stroke: var(--paper); stroke-width: 2; }
+.wchart .tm.up circle { fill: #2f8a46; }
+.wchart .tm.down circle { fill: #b3342f; }
+.wchart .tm text { fill: #fff; font-size: 13px; font-weight: 700; font-family: "Fredoka", sans-serif; pointer-events: none; }
+.panel.stats .cap { min-height: 20px; font-size: 13px; color: var(--ink); margin: 2px 0 4px; }
+.panel.stats .turns { list-style: none; padding: 0; margin: 4px 0; }
+.panel.stats .turns li, .panel.stats .deals li, .panel.stats .notable li { font-size: 14px; line-height: 1.4; padding: 5px 0; border-bottom: 1.5px dashed #e3d4b2; }
+.panel.stats .turns b { display: inline-block; min-width: 72px; }
+.panel.stats .up { color: #2f8a46; }
+.panel.stats .down { color: #b3342f; }
+.panel.stats ul { list-style: none; padding: 0; margin: 4px 0; }
+.panel.stats .tag { display: inline-block; font-size: 12px; font-weight: 700; padding: 0 8px; border-radius: 99px; margin-right: 4px; color: #fff; }
+.panel.stats .tag.good { background: #2f8a46; }
+.panel.stats .tag.bad { background: #b3342f; }
+.panel.stats .rel { color: var(--ink-soft); }
+.panel.stats .notable small { display: block; font-size: 12px; color: var(--ink-soft); }

@@ -8,12 +8,12 @@
   const BOT_NAMES = ["Berta", "Konrad", "Hilde", "Gustav"];
   const SAVE_KEY = "kh-spielstand-v1";
 
-  const st = { game: null, bots: {}, opponents: "ai", level: "mittel", loaded: false };
+  const st = { game: null, bots: {}, opponents: "ai", level: "schwer", loaded: false, coach: null };
 
   function save() {
     if (!st.game) return;
     try {
-      localStorage.setItem(SAVE_KEY, JSON.stringify({ game: st.game.toJSON(), opponents: st.opponents, level: st.level }));
+      localStorage.setItem(SAVE_KEY, JSON.stringify({ game: st.game.toJSON(), opponents: st.opponents, level: st.level, coach: st.coach }));
     } catch (e) { /* Speicher voll oder gesperrt – dann eben ohne Speichern */ }
   }
 
@@ -33,6 +33,7 @@
       st.game = KH.Game.fromJSON(data.game);
       st.opponents = data.opponents;
       st.level = data.level;
+      st.coach = data.coach || Coach.fresh();
       st.bots = await makeBots(st.game.n);
     } catch (e) {
       st.game = null;   // alter oder beschädigter Spielstand
@@ -45,6 +46,14 @@
     const v = KH.playerView(g, HUMAN, since || 0);
     v.bot_turn = g.toAct !== null && g.toAct !== HUMAN;
     return v;
+  }
+
+  /** Rückblick mitschreiben – darf das Spiel nie aufhalten oder kaputt machen. */
+  const auInfo = (g) => (g.auction ? { auctioneer: g.auction.auctioneer, card: g.auction.card } : null);
+  async function coachStep(g, fn, opts) {
+    const au = auInfo(g), ev0 = g.events.length;
+    fn();
+    try { await Coach.after(st.coach, g, au, ev0, opts); } catch (e) { /* ohne Rückblick weiter */ }
   }
 
   function parseAction(a) {
@@ -66,12 +75,17 @@
         case "/api/new": {
           const n = Number(body.players || 4);
           st.opponents = body.opponents || "ai";
-          st.level = body.level || "mittel";
+          st.level = body.level || "schwer";
           st.game = new KH.Game(n, { names: [body.name || "Du", ...BOT_NAMES.slice(0, n - 1)] });
           st.bots = await makeBots(n);
+          st.coach = Coach.fresh();
+          try { await Coach.after(st.coach, st.game, null, 0); } catch (e) { /* egal */ }
           save();
           return view(0);
         }
+        case "/api/stats":
+          if (!st.game || st.game.phase !== "over" || !st.coach) return { error: "Keine Statistik" };
+          return Coach.summary(st.coach, st.game);
         case "/api/takeover":
         case "/api/state":
           return view(since);
@@ -79,19 +93,23 @@
           const g = st.game;
           if (!g) return { error: "Kein Spiel" };
           if (g.toAct !== HUMAN) return { error: "Du bist nicht dran" };
-          g.step(parseAction(body.action));
+          const action = parseAction(body.action);
+          try { await Coach.before(st.coach, g, action); } catch (e) { /* egal */ }
+          await coachStep(g, () => g.step(action));
           save();
           return view(since);
         }
         case "/api/bot_step": {
           const g = st.game;
-          if (g && g.toAct !== null && g.toAct !== HUMAN) { g.step(st.bots[g.toAct].act(g)); save(); }
+          if (g && g.toAct !== null && g.toAct !== HUMAN) { await coachStep(g, () => g.step(st.bots[g.toAct].act(g))); save(); }
           return view(since);
         }
         case "/api/skip_auction": {
           // Test-Hilfe: Versteigerung automatisch zu Ende spielen (eigene Züge macht ein einfacher Bot)
           const g = st.game, standIn = new AI.HeuristicBot();
-          while (g.phase === "auction") g.step((g.toAct === HUMAN ? standIn : st.bots[g.toAct]).act(g));
+          await coachStep(g, () => {
+            while (g.phase === "auction") g.step((g.toAct === HUMAN ? standIn : st.bots[g.toAct]).act(g));
+          }, { skip: true });
           save();
           return view(since);
         }
